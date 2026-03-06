@@ -162,6 +162,11 @@ def build_design(
             raise ValueError(f"Blocked by safety gate: {risk}")
 
     if product_type == "hat":
+        generate_mode = (os.getenv("GENERATE_MODE") or "raster").strip().lower()
+        if generate_mode not in ("raster", "png"):
+            # SVG-first path is intentionally gated until fully wired.
+            generate_mode = "raster"
+
         if include_text is None:
             include_text = False
 
