@@ -4,6 +4,7 @@ import os
 import random
 import hashlib
 import json
+import sys
 from datetime import datetime, timezone
 from typing import List, Dict, Tuple, Optional
 
@@ -49,6 +50,22 @@ def _sha1(s: str) -> str:
 def _env_true(name: str, default: str = "0") -> bool:
     v = (os.getenv(name, default) or "").strip().lower()
     return v in ("1", "true", "yes", "y", "on")
+
+
+def _windows_safe_text(msg: str) -> str:
+    """Avoid UnicodeEncodeError on legacy Windows consoles."""
+    if os.name != "nt":
+        return msg
+    return msg.encode("ascii", errors="replace").decode("ascii")
+
+
+def log(msg: str) -> None:
+    try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(errors="replace")
+    except Exception:
+        pass
+    print(_windows_safe_text(msg))
 
 
 def load_queue() -> List[Dict[str, str]]:
@@ -275,7 +292,7 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
 # ----------------------------
 # Generate-only mode (human review)
 # ----------------------------
-def generate_batch(n: int, *, drop_filter: str = "") -> int:
+def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
     """Generate images for the next N NEW rows and stop (no upload/publish)."""
     load_dotenv()
     rows = load_queue()
@@ -285,6 +302,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
     want_prompt = _env_true("PROMPT_DEBUG", "0")
 
     generated = 0
+    failed = 0
     for idx, r in enumerate(rows):
         if generated >= n:
             break
@@ -314,6 +332,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
                 r["status"] = "HOLD_ERROR"
                 r["risk_reason"] = f"phrase_error:{type(e).__name__}:{e}"
                 rows[idx] = r
+                failed += 1
                 continue
 
         # risk gate
@@ -323,6 +342,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
         if risk_flag == "REVIEW" and (r.get("policy_status", "") or "").strip().upper() != "APPROVED":
             r["status"] = "HOLD"
             rows[idx] = r
+            failed += 1
             continue
 
         drop_display = get_drop_title(drop) if drop else ""
@@ -351,6 +371,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
             r["status"] = "HOLD_ERROR"
             r["risk_reason"] = f"gen_error:{type(e).__name__}:{e}"
             rows[idx] = r
+            failed += 1
             continue
 
         # prompt logging
@@ -373,6 +394,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
         if not ok:
             r["status"] = "HOLD_QUALITY"
             rows[idx] = r
+            failed += 1
             continue
 
         filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
@@ -386,7 +408,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> int:
         generated += 1
 
     save_queue(rows)
-    return generated
+    return generated, failed
 
 
 def verify_generated(*, prune_missing: bool = True) -> tuple[int, int, int]:
@@ -448,7 +470,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         target_idx = pick_next_row_index(rows)
 
     if target_idx is None:
-        print("✅ No publishable NEW/APPROVED rows.")
+        log("✅ No publishable NEW/APPROVED rows.")
         return False
 
     r = rows[target_idx]
@@ -474,7 +496,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["status"] = "HOLD"
         rows[target_idx] = r
         save_queue(rows)
-        print(f"🟨 Row {rid} flagged for REVIEW: {risk_reason}. Set policy_status=APPROVED to proceed.")
+        log(f"🟨 Row {rid} flagged for REVIEW: {risk_reason}. Set policy_status=APPROVED to proceed.")
         return False
 
     # Drop limit gate BEFORE spending money/time
@@ -483,7 +505,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["status"] = "SOLD_OUT"
         rows[target_idx] = r
         save_queue(rows)
-        print(f"🟥 Drop limit reached for {drop} (limit={limit}). Row {rid} marked SOLD_OUT.")
+        log(f"🟥 Drop limit reached for {drop} (limit={limit}). Row {rid} marked SOLD_OUT.")
         return False
 
     drop_display = get_drop_title(drop) if drop else ""
@@ -526,7 +548,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["risk_reason"] = f"gen_error:{type(e).__name__}:{e}"
         rows[target_idx] = r
         save_queue(rows)
-        print(f"🟥 Row {rid} generation failed: {e}")
+        log(f"🟥 Row {rid} generation failed: {e}")
         return False
 
     if want_prompt:
@@ -546,7 +568,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["status"] = "HOLD_QUALITY"
         rows[target_idx] = r
         save_queue(rows)
-        print(f"🟨 Row {rid} failed quality gate: {q_reason}.")
+        log(f"🟨 Row {rid} failed quality gate: {q_reason}.")
         return False
 
     # Save locally
@@ -571,7 +593,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
             mock_url = upload_file(mock_path, key=f"nofilter/mockups/{mock_name}")
             r["mockup_r2_url"] = mock_url
         except Exception as e:
-            print(f"🟨 Mockup step skipped: {e}")
+            log(f"🟨 Mockup step skipped: {e}")
 
     # Push to Printify + publish
     blueprint_id = find_hat_blueprint()
@@ -619,7 +641,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
     rows[target_idx] = r
     save_queue(rows)
 
-    print(f"✅ Published hat: row={rid} product_id={product_id}")
+    log(f"✅ Published hat: row={rid} product_id={product_id}")
     return True
 
 
@@ -645,17 +667,17 @@ def main():
 
     # 1) Generate-only mode (human review workflow)
     if args.generate_batch and args.generate_batch > 0:
-        n = generate_batch(args.generate_batch, drop_filter=args.drop)
-        print(f"✅ Generated {n} images (status=GENERATED).")
-        print("\nNext:\n  - Manually delete any bad PNGs from your OUT_DIR folder (default: ./out)")
-        print("  - Then run: python run_queue.py --verify_generated")
+        generated, failed = generate_batch(args.generate_batch, drop_filter=args.drop)
+        log(f"✅ Generate pass complete: generated={generated} failed={failed}.")
+        log("\nNext:\n  - Manually delete any bad PNGs from your OUT_DIR folder (default: ./out)")
+        log("  - Then run: python run_queue.py --verify_generated")
         return
 
     # 2) Verification mode
     if args.verify_generated:
         checked, approved, rejected = verify_generated(prune_missing=not args.keep_rejected)
-        print(f"✅ Verified {checked} GENERATED rows → APPROVED={approved} rejected={rejected}.")
-        print("Now publish with: python run_queue.py --once   (or --run_all)")
+        log(f"✅ Verify pass complete: checked={checked} approved={approved} rejected={rejected}.")
+        log("Now publish with: python run_queue.py --once   (or --run_all)")
         return
 
     # 3) Seeding
@@ -675,7 +697,7 @@ def main():
             rows = seed_queue(rows, args.seed, drop=args.drop, include_text=args.include_text)
 
         save_queue(rows)
-        print(f"✅ Seeded {args.seed} rows.")
+        log(f"✅ Seeded {args.seed} rows.")
         if args.once or not args.loop:
             return
 
@@ -684,10 +706,15 @@ def main():
 
     # 4) Loop publish mode
     if args.loop:
+        published = 0
+        stopped = 0
         while True:
             did = process_one(auto_seed=False)
             if not did:
+                stopped += 1
                 break
+            published += 1
+        log(f"✅ Publish pass complete: published={published} stop_events={stopped}.")
         return
 
     # default: publish once (auto seed if queue empty)
