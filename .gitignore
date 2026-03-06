@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+.env
+
+# Runtime
+ui_app/state.json
+ui_app/logs/
+ui_app/backups/
+
+# Outputs
+out/
+output/
+
+# Locks
+queue.csv.lock
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,125 @@
+collection: 90s_Nostalgia_Hat_Drops
+version: v2
+
+safe_phrases:
+  - "NO FILTER"
+  - "OFFLINE MODE"
+  - "NO WIFI ZONE"
+  - "LOADING..."
+  - "BUFFERING..."
+  - "ANALOG ERA"
+  - "RECESS FOREVER"
+  - "STAY ANALOG"
+  - "SIGNAL LOST"
+  - "OUT OF OFFICE (1999)"
+  - "RETRO MODE"
+  - "LOW BATTERY ENERGY"
+  - "BRB IRL"
+  - "CONNECTING..."
+  - "SAVED LOCALLY"
+
+palette_hints:
+  - "pastel mint + lavender"
+  - "teal + hot pink"
+  - "electric blue + neon yellow"
+  - "beige + forest green"
+  - "black + acid green"
+  - "washed denim blue + cream"
+  - "charcoal + pixel red"
+  - "dusty peach + sky blue"
+
+embroidery_styles:
+  - "satin stitch bold fill"
+  - "puff embroidery (3D raised)"
+  - "flat minimal line stitch"
+  - "small chest logo scale"
+  - "side panel micro icon"
+  - "front-center bold patch"
+
+drops:
+  - name: "Analog Era"
+    slug: "analog-era"
+    limited: 500
+    vibe: "retro tech minimal"
+    embroidery_focus: "bold center icon"
+    motifs:
+      - "generic floppy disk icon (original silhouette, no logos)"
+      - "abstract VHS cassette silhouette (original proportions, no markings)"
+      - "pixel smiley face (original grid-based design)"
+      - "8-bit heart icon (pixel grid, original)"
+      - "memphis geometric badge (triangles, squiggles, dots)"
+      - "checkerboard patch pattern (abstract crop)"
+      - "cassette tape outline (no label marks)"
+      - "rewinding arrows symbol (generic triangular arrows)"
+
+  - name: "Playground Core"
+    slug: "playground-core"
+    limited: 500
+    vibe: "recess nostalgia / carefree"
+    embroidery_focus: "patch style badge"
+    motifs:
+      - "pastel geometric badge (90s shapes, abstract)"
+      - "abstract squiggle doodle (original line art)"
+      - "minimal hopscotch grid icon (generic layout)"
+      - "recess whistle icon (simple silhouette)"
+      - "skate sticker style bolt (original shape)"
+      - "playground slide outline icon"
+      - "sunshine doodle (childlike simple rays)"
+      - "jump rope loop icon (minimal curve graphic)"
+
+  - name: "Early Internet"
+    slug: "early-internet"
+    limited: 500
+    vibe: "dial-up / web 1.0 humor"
+    embroidery_focus: "minimal icon left chest or front"
+    motifs:
+      - "cursor arrow icon (original vector style)"
+      - "loading bar icon (generic segmented bar)"
+      - "buffering dots icon (three dots minimal)"
+      - "dial-up waveform graphic (abstract, non-literal)"
+      - "offline indicator toggle icon (generic switch)"
+      - "404 Mood text badge (original typography)"
+      - "pixel globe wireframe (generic lines, not browser logos)"
+      - "signal strength bars icon (generic ascending bars)"
+
+  - name: "Mall Culture"
+    slug: "mall-culture"
+    limited: 400
+    vibe: "food court / arcade energy"
+    embroidery_focus: "bold puff embroidery"
+    motifs:
+      - "pixel lightning bolt badge (original)"
+      - "retro triangle sunset (abstract stripe bands, no gradients)"
+      - "arcade coin icon (generic circle with pixel edge)"
+      - "neon star outline (simple 5-point)"
+      - "roller rink disco swirl (abstract)"
+      - "sticker-style OPEN LATE badge (generic type)"
+      - "food court tray icon (minimal silhouette)"
+
+  - name: "After School TV"
+    slug: "after-school-tv"
+    limited: 400
+    vibe: "couch + cartoons (non-IP)"
+    embroidery_focus: "small embroidered icon"
+    motifs:
+      - "retro TV outline (box style, no logos)"
+      - "rabbit ear antenna silhouette"
+      - "pixel popcorn icon (original)"
+      - "rewind triangle icon (generic)"
+      - "abstract couch silhouette"
+      - "PLEASE REWIND text (original typography, not referencing brands)"
+      - "remote control outline (generic button layout)"
+
+  - name: "Y2K Minimal"
+    slug: "y2k-minimal"
+    limited: 350
+    vibe: "futuristic chrome / digital optimism"
+    embroidery_focus: "metallic thread option"
+    motifs:
+      - "chrome-style oval badge (no gradients, flat shapes only)"
+      - "minimal smile curve icon"
+      - "starburst sparkle icon (simple 4-point)"
+      - "CD disc abstract circle (no label rings)"
+      - "bubble text badge (original typography)"
+      - "swoosh curve (original arc, not brand-like)"
+      - "pixel flame icon (original grid design)"
