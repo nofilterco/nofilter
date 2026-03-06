@@ -1,104 +1,90 @@
-# NoFilterCo – 90s Nostalgia Hats (V1 → Blueprint-aligned)
+# NoFilterCo – Queue-Driven Hat Pipeline (Windows Git Bash friendly)
 
-This project generates **copyright-safe 90s nostalgia** hat designs (embroidery-friendly),
-uploads them to **Cloudflare R2**, then creates + publishes **Printify** hat products
-that auto-sync to **Shopify** (via your existing Printify → Shopify connection).
+NoFilterCo generates embroidery-safe nostalgic hat art, verifies quality/safety, uploads to R2, then publishes products to Printify (which syncs to Shopify).
 
 ## 1) Setup
 
 ```bash
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
+# Windows Git Bash:
+source .venv/Scripts/activate
+# Windows CMD:
+# .venv\Scripts\activate.bat
 # macOS/Linux:
 # source .venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-Create `.env` from `.env.example` and fill in values.
+Create `.env` and set:
 
-## 2) Seed your queue (adds NEW rows)
+- `OPENAI_API_KEY`
+- `PRINTIFY_TOKEN`
+- `PRINTIFY_SHOP_ID`
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY`
+- `R2_SECRET_KEY`
+- `R2_BUCKET`
 
-Seed 6 hats for the **Analog Era** drop (icon-only):
+## 2) CLI first (recommended)
 
+### Seed
 ```bash
 python run_queue.py --seed 6 --drop "Analog Era"
-```
-
-Seed 3 hats that include short safe text:
-
-```bash
 python run_queue.py --seed 3 --drop "Early Internet" --include_text
 ```
 
-## 3) Publish hats
+### Generate
+```bash
+python run_queue.py --generate_batch 6
+```
 
-Publish one item:
+### Verify
+```bash
+python run_queue.py --verify_generated
+```
 
+### Publish
 ```bash
 python run_queue.py --once
-```
-
-Publish everything queued:
-
-```bash
-python run_queue.py --loop
-```
-
-Alias (same behavior):
-
-```bash
+# or
 python run_queue.py --run_all
 ```
 
-## 4) Approvals gate (optional)
+The CLI now reports pass counts explicitly (`generated`, `failed`, `approved`, `rejected`, `published`).
 
-If a row is flagged as `risk_flag=REVIEW`, the runner will set `status=HOLD`.
-To force it through, edit `queue.csv` and set `policy_status=APPROVED`.
-
-(You should only do this if you've manually verified it's safe.)
-
-## 5) Hat catalog selection
-
-By default the runner tries to automatically find a hat blueprint/provider.
-
-If you want to lock the exact hat product, set:
-
-- `PRINTIFY_HAT_BLUEPRINT_ID`
-- `PRINTIFY_HAT_PROVIDER_ID` (optional)
-- `PRINTIFY_HAT_VARIANT_IDS` (optional; comma-separated)
-
-## Notes on embroidery quality
-
-The generator post-processes designs down to **<=6 colors** with thick shapes,
-and exports a **transparent PNG** for Printify.
-You can tune scale with `HAT_ART_SCALE` and colors with `HAT_COLORS`.
-
-
-## V2: Drop Mode (curated hats)
-
-- Seed 12 hats evenly across all drops:
+## 3) Local control panel (FastAPI)
 
 ```bash
-python run_queue.py --seed 12 --drop_mode
+uvicorn ui_app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-- Seed only Drop 01 (Analog Era):
+Open <http://127.0.0.1:8000>.
 
-```bash
-python run_queue.py --seed 6 --drop "Analog Era"
-```
+Dashboard includes:
+- Seed / Generate / Verify / Publish / Run All
+- Queue viewer
+- Gallery viewer (`out/`, `output/`)
+- Live status panel
+- First-run wizard (env + queue checks)
+- Drop picker with search + select all/none + custom drop fallback
 
-- Enable simple mockups (uploaded to R2) by setting `MAKE_MOCKUPS=1` in `.env`.
+## 4) Embroidery safety config
 
-### Shopify Collections (recommended)
+If `nofilter.yaml` has an `embroidery:` section, these keys are supported:
 
-Each published product is tagged with:
+- `embroidery_width_in`
+- `embroidery_height_in`
+- `safe_width_in`
+- `safe_height_in`
+- `max_colors`
+- `min_detail_in`
+- `min_text_in`
+- `allowed_thread_palette`
 
-- `drop:<slug>` (e.g. `drop:analog-era`)
-- `collection:<slug>`
-- `collection-handle:<slug>`
-- `limited:<count>` (e.g. `limited:500`)
+If missing, safe defaults are used automatically.
 
-Create Shopify automated collections using tag rules like `drop:analog-era`.
+## 5) Notes
+
+- Runtime files are ignored: `ui_app/state.json`, `ui_app/logs/`, `ui_app/backups/`, `out/`, `output/`, `queue.csv.lock`.
+- Raster generation remains the default path. `GENERATE_MODE=svg` is intentionally gated and falls back to raster until fully wired.

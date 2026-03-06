@@ -78,7 +78,52 @@ def _env_true(name: str, default: str = "0") -> bool:
 # =========================
 # Embroidery constraints
 # =========================
-MAX_THREAD_COLORS = 6
+@dataclass
+class EmbroideryConfig:
+    embroidery_width_in: float = 4.0
+    embroidery_height_in: float = 2.25
+    safe_width_in: float = 3.5
+    safe_height_in: float = 2.0
+    max_colors: int = 6
+    min_detail_in: float = 0.06
+    min_text_in: float = 0.2
+    allowed_thread_palette: List[str] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.allowed_thread_palette is None:
+            self.allowed_thread_palette = [
+                "black", "white", "navy", "charcoal", "red", "royal blue", "forest green", "khaki"
+            ]
+
+
+def load_embroidery_config(path: str = "nofilter.yaml") -> EmbroideryConfig:
+    default = EmbroideryConfig()
+    if not yaml or not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except Exception:
+        return default
+
+    emb = data.get("embroidery") or {}
+    if not isinstance(emb, dict):
+        return default
+
+    return EmbroideryConfig(
+        embroidery_width_in=float(emb.get("embroidery_width_in", default.embroidery_width_in)),
+        embroidery_height_in=float(emb.get("embroidery_height_in", default.embroidery_height_in)),
+        safe_width_in=float(emb.get("safe_width_in", default.safe_width_in)),
+        safe_height_in=float(emb.get("safe_height_in", default.safe_height_in)),
+        max_colors=int(emb.get("max_colors", default.max_colors)),
+        min_detail_in=float(emb.get("min_detail_in", default.min_detail_in)),
+        min_text_in=float(emb.get("min_text_in", default.min_text_in)),
+        allowed_thread_palette=[str(x) for x in (emb.get("allowed_thread_palette") or default.allowed_thread_palette)],
+    )
+
+
+EMBROIDERY_CONFIG = load_embroidery_config()
+MAX_THREAD_COLORS = EMBROIDERY_CONFIG.max_colors
 
 
 # =========================
