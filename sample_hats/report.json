@@ -1,0 +1,233 @@
+{
+  "counts": {
+    "phrase_hat": 14,
+    "word_hat": 4,
+    "icon_phrase_hat": 2,
+    "other": 0
+  },
+  "records": [
+    {
+      "sample_id": 1,
+      "requested_mode": "word_hat",
+      "composition_mode": "word_hat_single_line_center",
+      "type_treatment": "retro_tech_mono",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#660000,#96a1a8,#cc3333,#ffffff"
+    },
+    {
+      "sample_id": 2,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_arched_top",
+      "type_treatment": "retro_tech_mono",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#01784e,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 3,
+      "requested_mode": "word_hat",
+      "composition_mode": "word_hat_arched_top",
+      "type_treatment": "clean_sans_caps",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#01784e,#7ba35a,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 4,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "retro_tech_mono",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#6b5294,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 5,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "retro_tech_mono",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#7ba35a,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 6,
+      "requested_mode": "icon_phrase_hat",
+      "composition_mode": "icon_phrase_hat_small_icon_left",
+      "type_treatment": "arched_phrase",
+      "layout_archetype": "small_icon_left",
+      "icon_present": "false",
+      "palette_used": "#000000,#333366,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 7,
+      "requested_mode": "word_hat",
+      "composition_mode": "word_hat_two_line_stack",
+      "type_treatment": "stacked_phrase",
+      "layout_archetype": "two_line_stack",
+      "icon_present": "false",
+      "palette_used": "#3399ff,#ffffff"
+    },
+    {
+      "sample_id": 8,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "arched_phrase",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#ffcc00,#ffffff"
+    },
+    {
+      "sample_id": 9,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_two_line_stack",
+      "type_treatment": "script_accent",
+      "layout_archetype": "two_line_stack",
+      "icon_present": "false",
+      "palette_used": "#6b5294,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 10,
+      "requested_mode": "word_hat",
+      "composition_mode": "word_hat_two_line_stack",
+      "type_treatment": "bold_wordmark",
+      "layout_archetype": "two_line_stack",
+      "icon_present": "false",
+      "palette_used": "#96a1a8,#cc3333,#cc3366,#ffffff"
+    },
+    {
+      "sample_id": 11,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_arched_top",
+      "type_treatment": "script_accent",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#96a1a8,#e25c27,#ffffff"
+    },
+    {
+      "sample_id": 12,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_two_line_stack",
+      "type_treatment": "varsity_block",
+      "layout_archetype": "two_line_stack",
+      "icon_present": "false",
+      "palette_used": "#3399ff,#ffffff"
+    },
+    {
+      "sample_id": 13,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_arched_top",
+      "type_treatment": "arched_phrase",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#ffcc00,#ffffff"
+    },
+    {
+      "sample_id": 14,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_arched_top",
+      "type_treatment": "script_accent",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#7ba35a,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 15,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_two_line_stack",
+      "type_treatment": "bold_wordmark",
+      "layout_archetype": "two_line_stack",
+      "icon_present": "false",
+      "palette_used": "#ffffff"
+    },
+    {
+      "sample_id": 16,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "script_accent",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#96a1a8,#e25c27,#ffffff"
+    },
+    {
+      "sample_id": 17,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_arched_top",
+      "type_treatment": "bold_wordmark",
+      "layout_archetype": "arched_top",
+      "icon_present": "false",
+      "palette_used": "#ffcc00,#ffffff"
+    },
+    {
+      "sample_id": 18,
+      "requested_mode": "icon_phrase_hat",
+      "composition_mode": "icon_phrase_hat_icon_above_text",
+      "type_treatment": "script_accent",
+      "layout_archetype": "icon_above_text",
+      "icon_present": "true",
+      "palette_used": "#01784e,#7ba35a,#96a1a8,#ffffff"
+    },
+    {
+      "sample_id": 19,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "varsity_block",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#96a1a8,#a67843,#ffffff"
+    },
+    {
+      "sample_id": 20,
+      "requested_mode": "phrase_hat",
+      "composition_mode": "phrase_hat_single_line_center",
+      "type_treatment": "retro_tech_mono",
+      "layout_archetype": "single_line_center",
+      "icon_present": "false",
+      "palette_used": "#96a1a8,#e25c27,#ffffff"
+    }
+  ],
+  "phrase_library": {
+    "nostalgia_status": [
+      "PROBABLY BUFFERING",
+      "USER BUSY",
+      "LOW BATTERY",
+      "CACHE MISS",
+      "OFFLINE TODAY"
+    ],
+    "fake_departments": [
+      "LATE FEES DEPT",
+      "REWIND SERVICE",
+      "AFTER SCHOOL CLUB",
+      "VIDEO STORE STAFF"
+    ],
+    "dry_humor": [
+      "TOUCH GRASS LATER",
+      "SEEN ONLINE",
+      "NOT NOW",
+      "TRY AGAIN TOMORROW"
+    ],
+    "nostalgia_tech": [
+      "DIAL TONE",
+      "ANALOG HEART",
+      "VHS ENERGY",
+      "BUFFERING AGAIN"
+    ]
+  },
+  "typography_modes_seen": [
+    "arched_phrase",
+    "bold_wordmark",
+    "clean_sans_caps",
+    "retro_tech_mono",
+    "script_accent",
+    "stacked_phrase",
+    "varsity_block"
+  ],
+  "layout_modes_seen": [
+    "arched_top",
+    "icon_above_text",
+    "single_line_center",
+    "small_icon_left",
+    "two_line_stack"
+  ]
+}

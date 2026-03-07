@@ -1,0 +1,31 @@
+{
+  "example_phrases": [
+    "PROBABLY BUFFERING",
+    "LOW BATTERY CLUB",
+    "OFFLINE TODAY",
+    "ANALOG HEART",
+    "USER BUSY",
+    "CACHE MISS",
+    "AFTER SCHOOL CLUB",
+    "REWIND SERVICE",
+    "SEEN ONLINE",
+    "TOUCH GRASS LATER"
+  ],
+  "example_typography_modes": [
+    "arched_phrase",
+    "bold_wordmark",
+    "clean_sans_caps",
+    "retro_tech_mono",
+    "script_accent",
+    "stacked_phrase",
+    "varsity_block"
+  ],
+  "example_layout_modes": [
+    "arched_top",
+    "icon_above_text",
+    "single_line_center",
+    "small_icon_left",
+    "two_line_stack"
+  ],
+  "note": "No media artifacts are generated in this sample set. This file is text-only metadata."
+}
