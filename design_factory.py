@@ -152,125 +152,221 @@ def make_ai_art(prompt: str, *, canvas: Tuple[int, int]) -> Image.Image:
     return base
 
 
+def _score_hat_design(meta: Dict[str, str], brief) -> Dict[str, str]:
+    design_mode = (getattr(brief, "design_mode", "icon_only") or "icon_only").lower()
+    has_text = bool(getattr(brief, "include_text", False) and getattr(brief, "phrase", ""))
+    has_icon = meta.get("icon_present", "true") == "true"
+    plate_dependency = meta.get("plate_dependency", "low")
+
+    hierarchy = 8
+    balance = 8
+    typo = 8 if has_text else 0
+    icon_q = 8 if has_icon else 0
+
+    if design_mode == "text_only" and not has_text:
+        hierarchy -= 4
+        typo -= 5
+    if design_mode == "icon_only" and not has_icon:
+        hierarchy -= 4
+        icon_q -= 5
+    if design_mode == "icon_plus_text" and not (has_text and has_icon):
+        hierarchy -= 3
+        balance -= 2
+    if plate_dependency != "low":
+        hierarchy -= 3
+        balance -= 3
+    if meta.get("frame_mode") == "none" and design_mode == "icon_only" and meta.get("shape_quality") == "generic":
+        icon_q -= 3
+
+    meta["hierarchy_score"] = str(max(1, min(10, hierarchy)))
+    meta["visual_balance_score"] = str(max(1, min(10, balance)))
+    meta["typography_quality_score"] = str(max(1, min(10, typo))) if has_text else ""
+    meta["icon_quality_score"] = str(max(1, min(10, icon_q))) if has_icon else ""
+    meta["plate_dependency"] = plate_dependency
+    return meta
+
+
+def _pick_colors(rng: random.Random) -> Tuple[Tuple[int, int, int], Tuple[int, int, int], Tuple[int, int, int], Tuple[int, int, int]]:
+    palette = [_hex_to_rgb(c) for c in EMBROIDERY_CONFIG.allowed_thread_palette]
+    chosen = rng.sample(palette, k=min(4, len(palette)))
+    return tuple(chosen[0]), tuple(chosen[1]), tuple(chosen[2]), tuple(chosen[3])
+
+
+def _draw_icon(draw: ImageDraw.ImageDraw, motif: str, box: Tuple[int, int, int, int], colors, stroke: int) -> str:
+    x0, y0, x1, y1 = box
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    w, h = x1 - x0, y1 - y0
+    c1, c2, c3, c4 = colors
+    motif = motif.lower()
+
+    if any(k in motif for k in ("cassette", "tape")):
+        draw.rounded_rectangle(box, radius=int(h * 0.12), outline=c1 + (255,), width=stroke)
+        draw.rounded_rectangle((x0 + int(w*0.1), y0 + int(h*0.25), x0 + int(w*0.36), y0 + int(h*0.62)), radius=8, fill=c2 + (255,))
+        draw.rounded_rectangle((x1 - int(w*0.36), y0 + int(h*0.25), x1 - int(w*0.1), y0 + int(h*0.62)), radius=8, fill=c2 + (255,))
+        draw.line([(x0 + int(w*0.2), y1 - int(h*0.18)), (x1 - int(w*0.2), y1 - int(h*0.18))], fill=c3 + (255,), width=stroke)
+        return "stylized_cassette"
+    if any(k in motif for k in ("crt", "monitor", "screen")):
+        draw.rounded_rectangle((x0, y0, x1, y1 - int(h*0.12)), radius=int(h * 0.1), outline=c1 + (255,), width=stroke)
+        draw.rectangle((x0 + int(w*0.12), y0 + int(h*0.14), x1 - int(w*0.12), y1 - int(h*0.25)), fill=c2 + (255,))
+        draw.rectangle((cx - int(w*0.08), y1 - int(h*0.11), cx + int(w*0.08), y1 - int(h*0.04)), fill=c3 + (255,))
+        return "stylized_crt"
+    if "loading" in motif or "buffer" in motif:
+        draw.rounded_rectangle(box, radius=int(h * 0.2), outline=c1 + (255,), width=stroke)
+        sw = int(w * 0.14)
+        sx = x0 + int(w * 0.1)
+        for i in range(5):
+            col = c2 if i < 3 else c4
+            draw.rectangle((sx + i * sw, cy - int(h*0.12), sx + i * sw + sw - 6, cy + int(h*0.12)), fill=col + (255,))
+        return "stylized_loading"
+    if any(k in motif for k in ("cursor", "arrow")):
+        draw.polygon([(x0 + int(w*0.2), y0 + int(h*0.08)), (x0 + int(w*0.72), cy), (x0 + int(w*0.42), cy + int(h*0.05)), (x0 + int(w*0.58), y1 - int(h*0.08)), (x0 + int(w*0.42), y1 - int(h*0.03)), (x0 + int(w*0.28), cy + int(h*0.2)), (x0 + int(w*0.2), cy + int(h*0.24))], fill=c1 + (255,))
+        return "stylized_cursor"
+    if "battery" in motif:
+        draw.rounded_rectangle((x0, y0 + int(h*0.08), x1 - stroke*2, y1 - int(h*0.08)), radius=12, outline=c1 + (255,), width=stroke)
+        draw.rectangle((x1 - stroke*2, cy - int(h*0.1), x1, cy + int(h*0.1)), fill=c1 + (255,))
+        draw.rectangle((x0 + int(w*0.1), y0 + int(h*0.2), x0 + int(w*0.42), y1 - int(h*0.2)), fill=c2 + (255,))
+        return "stylized_battery"
+    if any(k in motif for k in ("floppy", "disk")):
+        draw.rectangle(box, outline=c1 + (255,), width=stroke)
+        draw.rectangle((x0 + int(w*0.14), y0 + int(h*0.12), x1 - int(w*0.14), y0 + int(h*0.36)), fill=c2 + (255,))
+        draw.rectangle((cx - int(w*0.12), y1 - int(h*0.28), cx + int(w*0.12), y1 - int(h*0.08)), fill=c3 + (255,))
+        return "stylized_floppy"
+    if any(k in motif for k in ("joystick", "arcade")):
+        draw.rounded_rectangle((x0 + int(w*0.08), y0 + int(h*0.5), x1 - int(w*0.08), y1), radius=18, outline=c1 + (255,), width=stroke)
+        draw.ellipse((cx - int(w*0.09), y0 + int(h*0.08), cx + int(w*0.09), y0 + int(h*0.28)), fill=c2 + (255,))
+        draw.rectangle((cx - int(w*0.02), y0 + int(h*0.26), cx + int(w*0.02), y0 + int(h*0.52)), fill=c2 + (255,))
+        return "stylized_joystick"
+    draw.ellipse(box, outline=c1 + (255,), width=stroke)
+    draw.polygon([(cx, y0 + int(h*0.15)), (x1 - int(w*0.2), y1 - int(h*0.18)), (x0 + int(w*0.2), y1 - int(h*0.18))], fill=c2 + (255,))
+    return "generic"
+
+
+def _draw_text_treatment(draw: ImageDraw.ImageDraw, phrase: str, treatment: str, area: Tuple[int, int, int, int], color: Tuple[int, int, int], rng: random.Random) -> None:
+    x0, y0, x1, y1 = area
+    cx = (x0 + x1) // 2
+    text = (phrase or "").strip().upper()
+    if not text:
+        return
+    compact = text[:28]
+    family = "Montserrat-Bold.ttf"
+    if treatment in ("chunky_varsity", "bold_single_line_wordmark"):
+        size = 82
+        font = _load_font(os.path.join("assets", "fonts", "Anton-Regular.ttf"), size)
+        while size > 40:
+            bb = draw.textbbox((0, 0), compact, font=font)
+            if bb[2] - bb[0] <= (x1 - x0):
+                break
+            size -= 4
+            font = _load_font(os.path.join("assets", "fonts", "Anton-Regular.ttf"), size)
+        draw.text((cx - (draw.textbbox((0,0), compact, font=font)[2] // 2), y0 + 4), compact, fill=color + (255,), font=font)
+        return
+    if treatment in ("stacked_slogan", "stacked_two_line", "direct_slogan_lockup") and " " in compact:
+        words = compact.split()
+        mid = max(1, len(words)//2)
+        lines = [" ".join(words[:mid]), " ".join(words[mid:])]
+        font = _load_font(os.path.join("assets", "fonts", family), 56)
+        yy = y0 + 6
+        for ln in lines:
+            bb = draw.textbbox((0,0), ln, font=font)
+            draw.text((cx - (bb[2]-bb[0])//2, yy), ln, fill=color + (255,), font=font)
+            yy += (bb[3]-bb[1]) + 6
+        return
+    font = _load_font(os.path.join("assets", "fonts", family), 48)
+    bb = draw.textbbox((0,0), compact, font=font)
+    draw.text((cx - (bb[2]-bb[0])//2, y0 + max(0, ((y1-y0)-(bb[3]-bb[1]))//2)), compact, fill=color + (255,), font=font)
+
+
 def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dict[str, str]]:
-    canvas = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(canvas)
     safe_x0 = (CANVAS_HAT[0] - HAT_SAFE_AREA[0]) // 2
     safe_y0 = (CANVAS_HAT[1] - HAT_SAFE_AREA[1]) // 2
     safe_x1 = safe_x0 + HAT_SAFE_AREA[0]
     safe_y1 = safe_y0 + HAT_SAFE_AREA[1]
 
-    seed = abs(hash(f"{brief.drop}|{brief.motif}|{brief.phrase}|{resolved_style}"))
+    seed = abs(hash(f"{brief.drop}|{brief.motif}|{brief.phrase}|{resolved_style}|{getattr(brief, 'art_direction', '')}"))
     rng = random.Random(seed)
-
-    fill_pct = rng.uniform(0.72, 0.84)
-    motif_w = int(HAT_SAFE_AREA[0] * fill_pct)
-    motif_h = int(HAT_SAFE_AREA[1] * rng.uniform(0.6, 0.82))
-    cx = (safe_x0 + safe_x1) // 2
-    cy = (safe_y0 + safe_y1) // 2
-    bbox = (cx - motif_w // 2, cy - motif_h // 2, cx + motif_w // 2, cy + motif_h // 2)
-
-    palette = [_hex_to_rgb(c) for c in EMBROIDERY_CONFIG.allowed_thread_palette]
-    chosen = rng.sample(palette, k=min(5, len(palette)))
-    bg, primary, accent, accent2, accent3 = (chosen + chosen[:5])[:5]
-    stroke = max(6, int(CANVAS_HAT[0] * 0.005))
-
-    shape_mode = resolved_style
     design_mode = (getattr(brief, "design_mode", "icon_only") or "icon_only").strip().lower()
-    text_mode = (getattr(brief, "text_mode", "") or "").strip().lower()
-    if shape_mode in ("text-lockup", "wordmark-icon") and brief.phrase:
-        shape_mode = "direct-front-graphic"
+    type_treatment = (getattr(brief, "type_treatment", "") or getattr(brief, "text_mode", "single_line")).strip().lower()
+    layout = (getattr(brief, "layout_archetype", "") or "centered_icon").strip().lower()
+    frame_treatment = (getattr(brief, "frame_treatment", "none") or "none").strip().lower()
 
-    x0, y0, x1, y1 = bbox
-    motif = (getattr(brief, "motif", "") or "").lower()
-    if "cassette" in motif or "tape" in motif:
-        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.12), fill=primary + (255,), outline=accent + (255,), width=stroke)
-        win_w, win_h = int(motif_w * 0.22), int(motif_h * 0.28)
-        draw.rounded_rectangle((cx - win_w - 10, cy - win_h // 2, cx - 10, cy + win_h // 2), radius=8, fill=accent2 + (255,))
-        draw.rounded_rectangle((cx + 10, cy - win_h // 2, cx + win_w + 10, cy + win_h // 2), radius=8, fill=accent2 + (255,))
-        draw.rectangle((cx - motif_w // 8, cy + motif_h // 6, cx + motif_w // 8, cy + motif_h // 6 + stroke * 2), fill=accent3 + (255,))
-    elif "crt" in motif or "monitor" in motif or "screen" in motif:
-        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.1), fill=primary + (255,), outline=accent + (255,), width=stroke)
-        inset = int(motif_w * 0.12)
-        draw.rectangle((x0 + inset, y0 + inset, x1 - inset, y1 - inset - stroke * 3), fill=accent2 + (255,))
-        draw.rectangle((cx - motif_w // 10, y1 - inset - stroke * 2, cx + motif_w // 10, y1 - inset), fill=accent3 + (255,))
-    elif "battery" in motif:
-        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.12), fill=primary + (255,), outline=accent + (255,), width=stroke)
-        draw.rectangle((x1, cy - motif_h // 8, x1 + stroke * 2, cy + motif_h // 8), fill=accent + (255,))
-        draw.rectangle((x0 + stroke * 2, y0 + stroke * 2, x0 + motif_w // 3, y1 - stroke * 2), fill=accent2 + (255,))
-    elif "loading" in motif or "buffer" in motif:
-        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.2), fill=primary + (255,), outline=accent + (255,), width=stroke)
-        seg_w = int((motif_w * 0.72) / 5)
-        sx = cx - int(motif_w * 0.36)
-        for i in range(5):
-            col = accent2 if i < 3 else bg
-            draw.rectangle((sx + i * seg_w, cy - motif_h // 8, sx + i * seg_w + seg_w - 5, cy + motif_h // 8), fill=col + (255,))
-    elif shape_mode in ("centered-emblem", "direct-front-graphic", "bold-icon-block"):
-        draw.ellipse(bbox, fill=primary + (255,), outline=accent + (255,), width=stroke)
-        in_pad = int(motif_w * 0.22)
-        draw.polygon([(cx, y0 + in_pad), (x1 - in_pad, y1 - in_pad), (x0 + in_pad, y1 - in_pad)], fill=accent2 + (255,))
-    elif shape_mode in ("geometric-monogram", "monoline-symbol"):
-        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.18), fill=primary + (255,), outline=accent + (255,), width=stroke)
-        draw.line([(x0 + motif_w * 0.25, y0 + motif_h * 0.25), (cx, y1 - motif_h * 0.2), (x1 - motif_w * 0.25, y0 + motif_h * 0.25)], fill=accent2 + (255,), width=stroke)
-    elif shape_mode == "simplified-mascot-icon":
-        head = (cx - motif_w // 4, y0 + motif_h // 6, cx + motif_w // 4, cy + motif_h // 8)
-        body = (cx - motif_w // 3, cy - motif_h // 16, cx + motif_w // 3, y1 - motif_h // 8)
-        draw.ellipse(head, fill=primary + (255,), outline=accent + (255,), width=stroke)
-        draw.rounded_rectangle(body, radius=int(motif_h * 0.1), fill=accent2 + (255,), outline=accent + (255,), width=stroke)
-        draw.rectangle((cx - stroke, cy - stroke, cx + stroke, y1 - motif_h // 5), fill=accent3 + (255,))
-    else:
-        draw.polygon([(cx, y0), (x1, cy), (cx, y1), (x0, cy)], fill=primary + (255,), outline=accent + (255,), width=stroke)
-        draw.ellipse((cx - motif_w // 5, cy - motif_h // 5, cx + motif_w // 5, cy + motif_h // 5), fill=accent2 + (255,))
+    best = None
+    for _ in range(4):
+        canvas = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(canvas)
+        c1, c2, c3, c4 = _pick_colors(rng)
+        stroke = max(6, int(CANVAS_HAT[0] * 0.0055))
 
-    # optional motif-specific frame only
-    frame_mode = "none"
-    if (brief.motif_frame or "").lower() in ("circle", "shield", "hex") and rng.random() < 0.25:
-        frame_mode = "motif_specific"
-        pad = stroke * 2
-        draw.rounded_rectangle((x0 - pad, y0 - pad, x1 + pad, y1 + pad), radius=int(motif_h * 0.2), outline=accent3 + (255,), width=stroke)
+        icon_box = (safe_x0 + 220, safe_y0 + 70, safe_x1 - 220, safe_y1 - 150)
+        text_box = (safe_x0 + 80, safe_y1 - 135, safe_x1 - 80, safe_y1)
+        if layout == "centered_wordmark":
+            icon_box = (safe_x0 + 260, safe_y0 + 80, safe_x1 - 260, safe_y0 + 220)
+            text_box = (safe_x0 + 70, safe_y0 + 170, safe_x1 - 70, safe_y1 - 40)
+        elif layout == "monogram_lockup":
+            icon_box = (safe_x0 + 300, safe_y0 + 70, safe_x1 - 300, safe_y0 + 300)
+            text_box = (safe_x0 + 120, safe_y1 - 120, safe_x1 - 120, safe_y1)
 
-    if brief.include_text and brief.phrase and len(brief.phrase) <= 22:
-        font = _load_font(os.path.join("assets", "fonts", "Montserrat-Bold.ttf"), max(36, int(motif_h * 0.12)))
-        text = brief.phrase.upper()
-        if design_mode in ("text_only", "short_quote", "meme_phrase", "nostalgia_wordmark"):
-            if text_mode == "stacked_two_line" and " " in text:
-                words = text.split()
-                mid = max(1, len(words) // 2)
-                lines = [" ".join(words[:mid]), " ".join(words[mid:])]
-                h = 0
-                bbs = []
-                for ln in lines:
-                    b = draw.textbbox((0, 0), ln, font=font)
-                    bbs.append(b)
-                    h += (b[3] - b[1]) + 10
-                y = cy - h // 2
-                for i, ln in enumerate(lines):
-                    b = bbs[i]
-                    tx = cx - (b[2] - b[0]) // 2
-                    draw.text((tx, y), ln, font=font, fill=accent + (255,))
-                    y += (b[3] - b[1]) + 10
-            else:
-                tb = draw.textbbox((0, 0), text, font=font)
-                tx = cx - (tb[2] - tb[0]) // 2
-                ty = cy - (tb[3] - tb[1]) // 2
-                draw.text((tx, ty), text, font=font, fill=accent + (255,))
-        else:
-            tb = draw.textbbox((0, 0), text, font=font)
-            tw = tb[2] - tb[0]
-            tx = cx - tw // 2
-            ty = min(safe_y1 - (tb[3] - tb[1]) - 4, y1 + 8)
-            draw.text((tx, ty), text, font=font, fill=accent + (255,))
+        shape_quality = "good"
+        icon_present = design_mode != "text_only"
+        if icon_present:
+            icon_shape = _draw_icon(draw, getattr(brief, "motif", ""), icon_box, (c1, c2, c3, c4), stroke)
+            shape_quality = "generic" if icon_shape == "generic" else "refined"
 
-    safe_fill = motif_w / float(HAT_SAFE_AREA[0])
-    meta = {
-        "composition_mode": f"{design_mode}_centered",
+        if design_mode != "icon_only" and getattr(brief, "include_text", False):
+            _draw_text_treatment(draw, getattr(brief, "phrase", ""), type_treatment, text_box, c1, rng)
+
+        frame_mode = "none"
+        if frame_treatment in ("underline", "ring", "arc", "border"):
+            frame_mode = frame_treatment
+            if frame_treatment == "underline":
+                draw.line([(safe_x0 + 170, safe_y1 - 12), (safe_x1 - 170, safe_y1 - 12)], fill=c3 + (255,), width=stroke)
+            elif frame_treatment == "ring" and design_mode != "text_only":
+                x0,y0,x1,y1 = icon_box
+                draw.ellipse((x0-20,y0-18,x1+20,y1+18), outline=c4 + (255,), width=stroke)
+            elif frame_treatment == "arc":
+                draw.arc((safe_x0+100, safe_y0+20, safe_x1-100, safe_y1-10), 200, 340, fill=c4 + (255,), width=stroke)
+            elif frame_treatment == "border":
+                draw.rectangle((safe_x0+60, safe_y0+20, safe_x1-60, safe_y1-20), outline=c4 + (255,), width=stroke)
+
+        safe_fill = ((icon_box[2]-icon_box[0]) if icon_present else (text_box[2]-text_box[0])) / float(HAT_SAFE_AREA[0])
+        meta = {
+            "composition_mode": f"{design_mode}_{layout}",
+            "background_mode": "transparent",
+            "frame_mode": frame_mode,
+            "safe_area_fill_pct": f"{safe_fill:.3f}",
+            "motif_bbox": f"{icon_box[0]},{icon_box[1]},{icon_box[2]},{icon_box[3]}",
+            "vector_mode_used": "true",
+            "art_direction": getattr(brief, "art_direction", ""),
+            "layout_archetype": getattr(brief, "layout_archetype", layout),
+            "type_treatment": getattr(brief, "type_treatment", type_treatment),
+            "icon_treatment": getattr(brief, "icon_treatment", "clean_silhouette"),
+            "frame_treatment": frame_treatment,
+            "visual_energy": getattr(brief, "visual_energy", "balanced"),
+            "commercial_style_reason": getattr(brief, "commercial_style_reason", ""),
+            "plate_dependency": "low",
+            "icon_present": "true" if icon_present else "false",
+            "shape_quality": shape_quality,
+        }
+        meta = _score_hat_design(meta, brief)
+
+        if int(meta.get("hierarchy_score", "1")) >= 7 and int(meta.get("visual_balance_score", "1")) >= 7 and meta.get("plate_dependency") == "low":
+            return canvas, meta
+        best = (canvas, meta)
+
+    if best:
+        return best
+    return Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0)), {
+        "composition_mode": f"{design_mode}_fallback",
         "background_mode": "transparent",
-        "frame_mode": frame_mode,
-        "safe_area_fill_pct": f"{safe_fill:.3f}",
-        "motif_bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
+        "frame_mode": "none",
+        "safe_area_fill_pct": "0.720",
+        "motif_bbox": "",
         "vector_mode_used": "true",
+        "hierarchy_score": "6",
+        "visual_balance_score": "6",
+        "typography_quality_score": "",
+        "icon_quality_score": "",
+        "plate_dependency": "low",
     }
-    return canvas, meta
 
 
 def build_design(

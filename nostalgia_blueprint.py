@@ -557,17 +557,82 @@ TEXT_MODES = [
     "arched_with_icon",
     "block_monogram",
     "icon_above_word",
+    "bold_single_line_wordmark",
+    "stacked_slogan",
+    "arched_line_with_center_icon",
+    "icon_over_micro_phrase",
+    "utility_small_caps",
+    "faux_department_mark",
+    "chunky_varsity",
+    "condensed_tech_status",
+    "monogram_with_subtitle",
+    "direct_slogan_lockup",
 ]
 
+ART_DIRECTIONS = [
+    "retro_tech_wordmark",
+    "club_emblem",
+    "workwear_label",
+    "collegiate_arc",
+    "utility_status_mark",
+    "minimal_streetwear",
+    "novelty_trucker",
+    "premium_icon_lockup",
+    "clean_monogram",
+    "playful_program_mark",
+]
+
+LAYOUT_ARCHETYPES = [
+    "centered_icon",
+    "centered_wordmark",
+    "icon_with_word_below",
+    "wordmark_with_icon_accent",
+    "tasteful_emblem_frame",
+    "monogram_lockup",
+]
+
+TYPE_TREATMENTS = [
+    "bold_single_line_wordmark",
+    "stacked_2line_slogan",
+    "arched_topline",
+    "icon_over_small_phrase",
+    "understated_small_caps_utility",
+    "faux_department_service_mark",
+    "chunky_varsity_block",
+    "condensed_status_wordmark",
+    "centered_monogram_subtitle",
+    "direct_slogan_lockup",
+]
+
+ICON_TREATMENTS = [
+    "chunky_geometric",
+    "monoline_round",
+    "retro_badge_symbol",
+    "clean_silhouette",
+    "playful_stamp",
+]
+
+FRAME_TREATMENTS = [
+    "none",
+    "underline",
+    "ring",
+    "shield",
+    "arc",
+    "banner",
+    "border",
+]
+
+VISUAL_ENERGY_LEVELS = ["calm", "balanced", "lively"]
+
 SLOGAN_BANK: Dict[str, List[str]] = {
-    "dry_humor": ["LOW BATTERY", "SNACK BREAK", "USER BUSY", "LATE FEES", "ANALOG MOOD"],
-    "faux_corporate": ["REWIND DEPT", "CACHE OFFICE", "HELP DESK 02", "NIGHT SHIFT", "STATUS BOARD"],
-    "fake_club": ["AFTER SCHOOL CLUB", "CAMCORDER CREW", "MALL CERTIFIED", "RENTAL MEMBER", "ARCADE NIGHT"],
-    "fake_department": ["BUFFER TEAM", "OFFLINE PROGRAM", "TAPE ARCHIVE", "DIAL TONE UNIT", "REPAIR DESK"],
-    "status_phrases": ["OFFLINE TODAY", "DO NOT DISTURB", "PROBABLY BUFFERING", "SEEN ONLINE", "SIGNAL LOW"],
-    "nostalgic_emotional": ["COUCH CAMP", "ANALOG HEART", "SLOW INTERNET", "HOME LAB", "RECESS ENERGY"],
-    "old_tech": ["DIAL TONE", "LOADING FOREVER", "RENTAL COPY", "DISK SAVED", "CRT MODE"],
-    "low_energy_meme": ["TOUCH GRASS LATER", "OUT OF OFFICE 1999", "BRB FOREVER", "MINIMUM EFFORT", "SOFT REBOOT"],
+    "dry_humor": ["LOW BATTERY CLUB", "SNACK BREAK", "USER BUSY", "LATE FEES", "ANALOG MOOD", "PROBABLY BUFFERING"],
+    "faux_corporate": ["REWIND SERVICE", "CACHE OFFICE", "HELP DESK 02", "STATUS BOARD", "NIGHT SHIFT UNIT"],
+    "fake_club": ["AFTER SCHOOL DEPT", "CAMCORDER CLUB", "MALL CERTIFIED", "RENTAL MEMBER", "ARCADE NIGHTS"],
+    "fake_department": ["BUFFER PROGRAM", "OFFLINE SERVICES", "TAPE ARCHIVE", "DIAL TONE UNIT", "REPAIR OFFICE"],
+    "status_phrases": ["OFFLINE TODAY", "DO NOT DISTURB", "SEEN ONLINE", "SIGNAL LOW", "SOFT REBOOT"],
+    "nostalgic_emotional": ["COUCH CAMP", "ANALOG HEART", "HOME LAB", "SNACK HOUR", "AFTER CLASS"],
+    "old_tech": ["DIAL TONE", "LOADING FOREVER", "RENTAL COPY", "DISK SAVED", "CRT MODE", "LOW RES CLUB"],
+    "low_energy_meme": ["TOUCH GRASS LATER", "BRB FOREVER", "MINIMUM EFFORT", "SOFT REBOOT", "SLOW START MODE"],
 }
 
 NOSTALGIA_AXES = ["80s_analog", "90s_mall", "2000s_internet", "arcade_night", "after_school_tv", "home_computer_lab"]
@@ -955,6 +1020,20 @@ class DesignBrief:
     center_weight: str = ""
     silhouette_strength: str = ""
 
+    # Explicit art direction + review/debug metrics
+    art_direction: str = ""
+    layout_archetype: str = ""
+    type_treatment: str = ""
+    icon_treatment: str = ""
+    frame_treatment: str = "none"
+    visual_energy: str = "balanced"
+    hierarchy_score: str = ""
+    visual_balance_score: str = ""
+    typography_quality_score: str = ""
+    icon_quality_score: str = ""
+    plate_dependency: str = "low"
+    commercial_style_reason: str = ""
+
 
 def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> DesignBrief:
     """
@@ -981,6 +1060,8 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
 
     style = pick_style_for_drop(drop_slug)
     tone = pick_tone_for_drop(drop_slug, edgy_mode=edgy_mode)
+    art_direction = random.choice(ART_DIRECTIONS)
+    visual_energy = random.choice(VISUAL_ENERGY_LEVELS)
 
     design_mode = _pick_weighted([
         ("icon_only", 23),
@@ -997,14 +1078,28 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
     nostalgia_axis = random.choice(NOSTALGIA_AXES)
     text_mode_by_design = {
         "icon_only": "",
-        "text_only": random.choice(["single_line", "stacked_two_line", "single_word"]),
-        "icon_plus_text": random.choice(["icon_above_word", "arched_with_icon", "single_line"]),
-        "monogram": "block_monogram",
-        "short_quote": random.choice(["stacked_two_line", "single_line"]),
-        "meme_phrase": random.choice(["single_line", "stacked_two_line"]),
-        "nostalgia_wordmark": random.choice(["single_word", "single_line"]),
+        "text_only": random.choice(["bold_single_line_wordmark", "stacked_slogan", "chunky_varsity", "condensed_tech_status"]),
+        "icon_plus_text": random.choice(["icon_above_word", "arched_line_with_center_icon", "faux_department_mark", "direct_slogan_lockup"]),
+        "monogram": "monogram_with_subtitle",
+        "short_quote": random.choice(["stacked_slogan", "condensed_tech_status"]),
+        "meme_phrase": random.choice(["direct_slogan_lockup", "stacked_slogan"]),
+        "nostalgia_wordmark": random.choice(["bold_single_line_wordmark", "utility_small_caps"]),
     }
     text_mode = text_mode_by_design.get(design_mode, "single_line")
+
+    layout_for_mode = {
+        "icon_only": ["centered_icon", "tasteful_emblem_frame"],
+        "text_only": ["centered_wordmark"],
+        "icon_plus_text": ["icon_with_word_below", "wordmark_with_icon_accent"],
+        "monogram": ["monogram_lockup"],
+        "short_quote": ["centered_wordmark", "wordmark_with_icon_accent"],
+        "meme_phrase": ["centered_wordmark", "icon_with_word_below"],
+        "nostalgia_wordmark": ["centered_wordmark", "wordmark_with_icon_accent"],
+    }
+    layout_archetype = random.choice(layout_for_mode.get(design_mode, LAYOUT_ARCHETYPES))
+    type_treatment = text_mode if include_text else random.choice(["understated_small_caps_utility", "condensed_status_wordmark"])
+    icon_treatment = random.choice(ICON_TREATMENTS)
+    frame_treatment = random.choice(["none", "none", "none", "underline", "ring", "arc", "border"])
 
     if include_text:
         phrase = choose_slogan(humor_mode=humor_mode, slogan_type=slogan_type, max_chars=22 if design_mode == "short_quote" else 20)
@@ -1027,6 +1122,12 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         "short phrase with clear meme-adjacent status humor",
         "era-coded icon concept with strong center silhouette",
         "clean wordmark with subtle internet-native tone",
+    ])
+    commercial_style_reason = random.choice([
+        "boutique trucker cap energy with tight hierarchy and tasteful icon pairing",
+        "novelty streetwear lockup that feels intentional, not templated",
+        "premium souvenir styling with compact typography and iconic silhouette",
+        "retro tech club mark tuned for wearable humor and clean embroidery",
     ])
 
     return DesignBrief(
@@ -1071,6 +1172,18 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         ], 3)),
         center_weight=random.choice(["strong", "strong", "medium"]),
         silhouette_strength=random.choice(["iconic", "iconic", "solid"]),
+        art_direction=art_direction,
+        layout_archetype=layout_archetype,
+        type_treatment=type_treatment,
+        icon_treatment=icon_treatment,
+        frame_treatment=frame_treatment,
+        visual_energy=visual_energy,
+        hierarchy_score=str(random.randint(7, 10)),
+        visual_balance_score=str(random.randint(7, 10)),
+        typography_quality_score=str(random.randint(7, 10)) if include_text else "",
+        icon_quality_score=str(random.randint(7, 10)) if design_mode != "text_only" else "",
+        plate_dependency="low",
+        commercial_style_reason=commercial_style_reason,
     )
 
 
@@ -1184,6 +1297,18 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
         motif_keywords=(row.get("motif_keywords") or "").strip(),
         center_weight=(row.get("center_weight") or "").strip(),
         silhouette_strength=(row.get("silhouette_strength") or "").strip(),
+        art_direction=(row.get("art_direction") or "").strip(),
+        layout_archetype=(row.get("layout_archetype") or "").strip(),
+        type_treatment=(row.get("type_treatment") or "").strip(),
+        icon_treatment=(row.get("icon_treatment") or "").strip(),
+        frame_treatment=(row.get("frame_treatment") or "none").strip(),
+        visual_energy=(row.get("visual_energy") or "balanced").strip(),
+        hierarchy_score=(row.get("hierarchy_score") or "").strip(),
+        visual_balance_score=(row.get("visual_balance_score") or "").strip(),
+        typography_quality_score=(row.get("typography_quality_score") or "").strip(),
+        icon_quality_score=(row.get("icon_quality_score") or "").strip(),
+        plate_dependency=(row.get("plate_dependency") or "low").strip(),
+        commercial_style_reason=(row.get("commercial_style_reason") or "").strip(),
     )
 
 
@@ -1284,6 +1409,16 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         "block_monogram": "bold block monogram letters",
         "icon_above_word": "simple icon above short word",
         "single_word": "single short wordmark",
+        "bold_single_line_wordmark": "bold single-line wordmark",
+        "stacked_slogan": "stacked 2-line slogan with deliberate hierarchy",
+        "arched_line_with_center_icon": "arched top line with centered icon",
+        "icon_over_micro_phrase": "icon over short phrase",
+        "utility_small_caps": "understated utility small-caps text",
+        "faux_department_mark": "faux department/service mark",
+        "chunky_varsity": "chunky varsity block text",
+        "condensed_tech_status": "condensed tech-status wordmark",
+        "monogram_with_subtitle": "centered monogram with subtitle",
+        "direct_slogan_lockup": "direct slogan lockup with balanced spacing",
     }.get(brief.text_mode or "", "centered compact embroidery lockup")
 
     drop_name = brief.drop_title or brief.drop
@@ -1311,6 +1446,11 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         f"Center weight: {brief.center_weight or 'strong'}. Silhouette strength: {brief.silhouette_strength or 'iconic'}. "
         f"Color palette hint: {brief.palette_hint}. {emb_style}{emb_focus}"
         f"Layout archetype: {style}. {style_desc} "
+        f"Art direction: {brief.art_direction or 'premium_icon_lockup'}. "
+        f"Composition archetype: {brief.layout_archetype or 'centered_icon'}. "
+        f"Type treatment: {brief.type_treatment or layout_guidance}. Icon treatment: {brief.icon_treatment or 'clean_silhouette'}. "
+        f"Frame treatment: {brief.frame_treatment or 'none'} (default transparent/no plate). Visual energy: {brief.visual_energy or 'balanced'}. "
+        f"Commercial style reason: {brief.commercial_style_reason or 'boutique trucker cap, premium novelty look'}. "
         f"Typography/layout mode: {layout_guidance}. "
         f"Commercial intent: {brief.commercial_interest_reason or 'wearable, nostalgic, meme-adjacent'}; "
         f"scores(wearable={brief.wearable_score or '8'}, novelty={brief.novelty_score or '8'}, nostalgia={brief.nostalgia_score or '8'}, clarity={brief.clarity_score or '8'}, embroidery={brief.embroidery_score or '8'}). "
@@ -1322,6 +1462,8 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         "Strict style rules: flat vector icon, solid color fills, bold embroidery outlines, minimum 4px strokes, "
         "no texture, no grain, no shadow, no gradients, no shading, no distressed or vintage effects, "
         "direct embroidery front graphic, clean vector emblem, bold icon geometry, not patch illustration. "
+        "Aim for boutique trucker hat / novelty streetwear cap / tasteful meme hat / retro tech club cap / premium souvenir hat. "
+        "Do not default to rounded-rectangle background plates or UI button slabs; keep transparent background unless framing is conceptually required. "
         "Avoid transparent holes in center forms when possible. Avoid thin lines and tiny detail. "
         "Use bold iconic center-weighted shapes, thick strokes, and clean stitch-safe geometry. "
         "Single centered composition only; no background scene, no watermark, no signature."
