@@ -421,6 +421,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                 drop=drop or None,
                 include_text=include_text,
                 brief_context=_brief_context_from_row(r),
+                validate_concept=False,
                 return_prompt=True,
             )
         except Exception as e:
@@ -450,7 +451,14 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
         # resolved style bookkeeping (best-effort; design_factory resolves internally)
         r["resolved_style"] = (r.get("style") or "").strip().lower()
 
-        # quality gate
+        filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
+        local_path = os.path.join(out_dir, filename)
+        img.save(local_path, "PNG")
+
+        r["local_path"] = local_path
+        r["generated_at"] = datetime.now(timezone.utc).isoformat()
+
+        # quality gate (must evaluate generated image, never concept text)
         ok, q_reason, q_json = pass_fail(img)
         prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
         prior_reason = (r.get("quality_reason") or "").strip()
@@ -458,29 +466,19 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
         if ok:
             r["quality_status"] = "REVIEW" if prior_review else "PASS"
             r["quality_reason"] = prior_reason if prior_review else ""
+            r["status"] = "GENERATED"
+            generated += 1
         else:
             r["quality_status"] = "FAIL"
             r["quality_reason"] = q_reason or ""
+            r["status"] = "HOLD_QUALITY"
+            failed += 1
         try:
             r["quality_json"] = json.dumps(q_json)
         except Exception:
             r["quality_json"] = str(q_json)
 
-        if not ok:
-            r["status"] = "HOLD_QUALITY"
-            rows[idx] = r
-            failed += 1
-            continue
-
-        filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
-        local_path = os.path.join(out_dir, filename)
-        img.save(local_path, "PNG")
-
-        r["local_path"] = local_path
-        r["generated_at"] = datetime.now(timezone.utc).isoformat()
-        r["status"] = "GENERATED"
         rows[idx] = r
-        generated += 1
 
     save_queue(rows)
     return generated, failed
@@ -648,6 +646,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
             drop=drop or None,
             include_text=include_text,
             brief_context=_brief_context_from_row(r),
+            validate_concept=False,
             return_prompt=True,
         )
     except Exception as e:
@@ -662,6 +661,14 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["prompt_debug"] = prompt_debug
     r["prompt_hash"] = _sha1(prompt_debug)
     r["resolved_style"] = (r.get("style") or "").strip().lower()
+
+    # Save locally before quality gate so gate evaluates generated output artifact
+    out_dir = os.getenv("OUT_DIR", "out")
+    os.makedirs(out_dir, exist_ok=True)
+    filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
+    local_path = os.path.join(out_dir, filename)
+    img.save(local_path, "PNG")
+    r["local_path"] = local_path
 
     ok, q_reason, q_json = pass_fail(img)
     prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
@@ -684,14 +691,6 @@ def process_one(*, auto_seed: bool = True) -> bool:
         save_queue(rows)
         log(f"🟨 Row {rid} failed quality gate: {q_reason}.")
         return False
-
-    # Save locally
-    out_dir = os.getenv("OUT_DIR", "out")
-    os.makedirs(out_dir, exist_ok=True)
-    filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
-    local_path = os.path.join(out_dir, filename)
-    img.save(local_path, "PNG")
-    r["local_path"] = local_path
 
     # Upload to R2
     r2_url = upload_file(local_path, key=f"nofilter/hats/{filename}")

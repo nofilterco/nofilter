@@ -153,6 +153,7 @@ def build_design(
     drop: Optional[str] = None,
     include_text: Optional[bool] = None,
     brief_context: Optional[dict] = None,
+    validate_concept: bool = True,
     return_prompt: bool = False,
 ) -> Union[Image.Image, Tuple[Image.Image, str]]:
     style_in = (style or "ai_art").strip().lower()
@@ -201,10 +202,11 @@ def build_design(
 
         brief.style = resolved_style
 
-        concept_ok, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
-        block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
-        if block_reasons:
-            raise ValueError(f"Embroidery concept rejected: {','.join(block_reasons)}")
+        if validate_concept:
+            concept_ok, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
+            block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
+            if block_reasons:
+                raise ValueError(f"Embroidery concept rejected: {','.join(block_reasons)}")
 
         prompt = build_product_prompt(brief, product_type=product_type)
         img = make_ai_art(prompt, canvas=CANVAS_HAT)
