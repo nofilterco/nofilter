@@ -40,6 +40,8 @@ from publish_hat import (
 
 QUEUE_PATH = "queue.csv"
 AUTO_SEED_IF_EMPTY = 5  # auto-add N NEW rows if nothing is publishable
+RUN_CONTROL_PATH = os.getenv("NOFILTER_RUN_CONTROL_PATH", "ui_app/state.json")
+TRACE_SEPARATOR = " | "
 
 
 # ----------------------------
@@ -81,6 +83,53 @@ def load_queue() -> List[Dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _read_control_state() -> dict:
+    try:
+        if not RUN_CONTROL_PATH or not os.path.exists(RUN_CONTROL_PATH):
+            return {}
+        with open(RUN_CONTROL_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def stop_requested() -> bool:
+    return bool(_read_control_state().get("stop_requested"))
+
+
+def cancel_pending_requested() -> bool:
+    return bool(_read_control_state().get("cancel_pending"))
+
+
+def _append_trace(r: Dict[str, str], message: str) -> None:
+    stamp = _now_iso()
+    existing = (r.get("debug_trace") or "").strip()
+    items = [i for i in existing.split(TRACE_SEPARATOR) if i] if existing else []
+    items.append(f"{stamp}:{message}")
+    r["debug_trace"] = TRACE_SEPARATOR.join(items[-25:])
+
+
+def _set_stage(r: Dict[str, str], stage: str, message: str = "") -> None:
+    r["pipeline_stage"] = stage
+    if message:
+        _append_trace(r, f"{stage}:{message}")
+    else:
+        _append_trace(r, stage)
+
+
+def _set_error(r: Dict[str, str], stage: str, err: Exception | str) -> None:
+    msg = err if isinstance(err, str) else f"{type(err).__name__}: {err}"
+    r["status"] = "ERROR"
+    r["pipeline_stage"] = "ERROR"
+    r["error_stage"] = stage
+    r["error_message"] = str(msg)
+    _append_trace(r, f"ERROR@{stage}:{msg}")
+
+
 def save_queue(rows: List[Dict[str, str]]) -> None:
     if not rows:
         return
@@ -98,6 +147,13 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "concept_risk",
         "quality_reason",
         "quality_json",
+        "pipeline_stage",
+        "concept_reasons",
+        "error_stage",
+        "error_message",
+        "debug_trace",
+        "started_at",
+        "finished_at",
         "drop_seq",
         "approved_at",
         "printify_product_id",
@@ -299,6 +355,13 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "concept_risk": "",
                 "quality_reason": "",
                 "quality_json": "",
+                "pipeline_stage": "SEEDED",
+                "concept_reasons": "",
+                "error_stage": "",
+                "error_message": "",
+                "debug_trace": "",
+                "started_at": "",
+                "finished_at": "",
                 "drop_seq": "",
                 "local_path": "",
                 "generated_at": "",
@@ -323,7 +386,6 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
     rows = load_queue()
     out_dir = os.getenv("OUT_DIR", "out")
     os.makedirs(out_dir, exist_ok=True)
-
     want_prompt = _env_true("PROMPT_DEBUG", "0")
 
     generated = 0
@@ -331,11 +393,13 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
     for idx, r in enumerate(rows):
         if generated >= n:
             break
+        if stop_requested():
+            log("🛑 Stop requested; halting before next queued item.")
+            break
 
         status = (r.get("status", "") or "").strip().upper()
         if status != "NEW":
             continue
-
         if drop_filter and (r.get("drop") or "").strip() != drop_filter:
             continue
 
@@ -347,23 +411,29 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
         motif = (r.get("motif") or "").strip()
         include_text = (r.get("include_text") or "NO").strip().upper() in ("YES", "TRUE", "1")
 
-        # keep phrase stable if seeded; only fill if missing and include_text
+        r["started_at"] = r.get("started_at") or _now_iso()
+        r["finished_at"] = ""
+        r["error_stage"] = ""
+        r["error_message"] = ""
+        _set_stage(r, "CONCEPT_CHECK", f"row={rid} drop={drop} motif={motif}")
+        log(f"ℹ️ [row={rid}] stage=CONCEPT_CHECK drop={drop} motif={motif}")
+
         phrase = (r.get("phrase") or "").strip()
         if include_text and not phrase:
             try:
                 phrase = pick_phrase("90s nostalgia")
                 r["phrase"] = phrase
             except Exception as e:
-                r["status"] = "HOLD_ERROR"
-                r["risk_reason"] = f"phrase_error:{type(e).__name__}:{e}"
+                _set_error(r, "PHRASE_PICK", e)
                 rows[idx] = r
                 failed += 1
+                log(f"🟥 [row={rid}] phrase selection failed: {e}")
                 continue
 
-        # concept gate (embroidery-first; block only clearly invalid concepts)
         try:
             brief_gate = brief_from_row(r, include_text=include_text)
-            concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+            _, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+            r["concept_reasons"] = ",".join(concept_reasons)
             block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
             risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
 
@@ -372,8 +442,11 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                 r["quality_status"] = "FAIL"
                 r["quality_reason"] = "concept:" + ",".join(block_reasons)
                 r["status"] = "HOLD_QUALITY"
+                _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
+                r["finished_at"] = _now_iso()
                 rows[idx] = r
                 failed += 1
+                log(f"🟨 [row={rid}] concept gate blocked: {r['quality_reason']}")
                 continue
 
             if risk_reasons:
@@ -386,31 +459,30 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                     r["quality_status"] = ""
                     r["quality_reason"] = ""
         except Exception as e:
-            # fail-open on concept parser errors so generation can proceed
             r["concept_risk"] = "MEDIUM"
             r["quality_status"] = "REVIEW"
             r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
+            r["concept_reasons"] = f"concept_error:{type(e).__name__}:{e}"
+            _append_trace(r, f"CONCEPT_CHECK_ERROR:{e}")
 
-        # risk gate
         risk_flag, risk_reason = _risk_check_row(r)
         r["risk_flag"] = risk_flag
         r["risk_reason"] = risk_reason
         if risk_flag == "REVIEW" and (r.get("policy_status", "") or "").strip().upper() != "APPROVED":
             r["status"] = "HOLD"
+            _set_stage(r, "HOLD", f"risk:{risk_reason}")
+            r["finished_at"] = _now_iso()
             rows[idx] = r
             failed += 1
+            log(f"🟨 [row={rid}] risk hold: {risk_reason}")
             continue
 
         drop_display = get_drop_title(drop) if drop else ""
-        title = build_title(
-            "",
-            product_type=product_type,
-            drop=drop_display,
-            motif_hint=("Loading" if "loading" in motif.lower() else None),
-        )
+        title = build_title("", product_type=product_type, drop=drop_display, motif_hint=("Loading" if "loading" in motif.lower() else None))
 
-        # ALWAYS define img; never crash the batch
         try:
+            _set_stage(r, "GENERATING", f"style={style}")
+            log(f"ℹ️ [row={rid}] stage=GENERATING style={style}")
             img, prompt_debug = build_design(
                 style=style,
                 title=title,
@@ -425,60 +497,68 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                 return_prompt=True,
             )
         except Exception as e:
-            r["status"] = "HOLD_ERROR"
-            r["risk_reason"] = f"gen_error:{type(e).__name__}:{e}"
+            _set_error(r, "DESIGN_GENERATION", e)
+            r["finished_at"] = _now_iso()
             rows[idx] = r
             failed += 1
+            log(f"🟥 [row={rid}] design generation failed: {e}")
             continue
 
-        # prompt logging
         if want_prompt:
             try:
-                r["prompt_debug"] = json.dumps({
-                    "prompt": prompt_debug,
-                    "product_type": product_type,
-                    "drop": drop,
-                    "motif": motif,
-                    "style": style,
-                    "motif_family": r.get("motif_family", ""),
-                    "motif_frame": r.get("motif_frame", ""),
-                    "motif_keywords": r.get("motif_keywords", ""),
-                }, ensure_ascii=False)
+                r["prompt_debug"] = json.dumps({"prompt": prompt_debug, "product_type": product_type, "drop": drop, "motif": motif, "style": style}, ensure_ascii=False)
             except Exception:
-                r["prompt_debug"] = prompt_debug
+                r["prompt_debug"] = str(prompt_debug)
         r["prompt_hash"] = _sha1(prompt_debug)
-
-        # resolved style bookkeeping (best-effort; design_factory resolves internally)
         r["resolved_style"] = (r.get("style") or "").strip().lower()
 
-        filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
-        local_path = os.path.join(out_dir, filename)
-        img.save(local_path, "PNG")
+        try:
+            filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
+            local_path = os.path.join(out_dir, filename)
+            img.save(local_path, "PNG")
+            if not os.path.exists(local_path):
+                raise RuntimeError(f"image_save_missing:{local_path}")
+            r["local_path"] = local_path
+            _set_stage(r, "IMAGE_SAVED", local_path)
+        except Exception as e:
+            _set_error(r, "IMAGE_SAVE", e)
+            r["finished_at"] = _now_iso()
+            rows[idx] = r
+            failed += 1
+            log(f"🟥 [row={rid}] image save failed: {e}")
+            continue
 
-        r["local_path"] = local_path
-        r["generated_at"] = datetime.now(timezone.utc).isoformat()
-
-        # quality gate (must evaluate generated image, never concept text)
+        _set_stage(r, "QUALITY_CHECK")
         ok, q_reason, q_json = pass_fail(img)
         prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
         prior_reason = (r.get("quality_reason") or "").strip()
-
         if ok:
             r["quality_status"] = "REVIEW" if prior_review else "PASS"
             r["quality_reason"] = prior_reason if prior_review else ""
-            r["status"] = "GENERATED"
-            generated += 1
         else:
             r["quality_status"] = "FAIL"
-            r["quality_reason"] = q_reason or ""
-            r["status"] = "HOLD_QUALITY"
-            failed += 1
+            r["quality_reason"] = q_reason or "pass_fail returned false"
         try:
             r["quality_json"] = json.dumps(q_json)
         except Exception:
             r["quality_json"] = str(q_json)
 
+        if not ok:
+            r["status"] = "HOLD_QUALITY"
+            _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
+            r["finished_at"] = _now_iso()
+            rows[idx] = r
+            failed += 1
+            log(f"🟨 [row={rid}] quality fail: {r['quality_reason']}")
+            continue
+
+        r["status"] = "GENERATED"
+        r["generated_at"] = _now_iso()
+        r["finished_at"] = _now_iso()
+        _set_stage(r, "GENERATED", "generation complete")
         rows[idx] = r
+        generated += 1
+        log(f"✅ [row={rid}] generated successfully")
 
     save_queue(rows)
     return generated, failed
@@ -505,6 +585,8 @@ def verify_generated(*, prune_missing: bool = True) -> tuple[int, int, int]:
         if path and os.path.exists(path):
             r["status"] = "APPROVED"
             r["approved_at"] = datetime.now(timezone.utc).isoformat()
+            r["finished_at"] = _now_iso()
+            _set_stage(r, "APPROVED", "verify_generated_exists")
             new_rows.append(r)
             approved += 1
         else:
@@ -512,6 +594,8 @@ def verify_generated(*, prune_missing: bool = True) -> tuple[int, int, int]:
             if prune_missing:
                 continue
             r["status"] = "REJECTED"
+            r["finished_at"] = _now_iso()
+            _set_stage(r, "REJECTED", "verify_generated_missing_local_path")
             new_rows.append(r)
 
     save_queue(new_rows)
@@ -525,9 +609,24 @@ def process_one(*, auto_seed: bool = True) -> bool:
     load_dotenv()
     rows = load_queue()
 
-    target_idx = pick_next_row_index(rows)
+    if stop_requested():
+        log("🛑 Stop requested; skipping new publish item.")
+        return False
 
-    # Auto-seed only if queue has nothing publishable
+    if cancel_pending_requested():
+        cancelled = 0
+        for row in rows:
+            if (row.get("status", "") or "").strip().upper() == "NEW":
+                row["status"] = "CANCELLED"
+                row["finished_at"] = _now_iso()
+                _set_stage(row, "CANCELLED", "cancel_all_pending")
+                cancelled += 1
+        if cancelled:
+            save_queue(rows)
+            log(f"🛑 Cancelled pending NEW rows: {cancelled}")
+        return False
+
+    target_idx = pick_next_row_index(rows)
     if target_idx is None and auto_seed:
         names = get_drop_names()
         per = max(1, int(AUTO_SEED_IF_EMPTY / max(1, len(names))))
@@ -548,7 +647,6 @@ def process_one(*, auto_seed: bool = True) -> bool:
 
     r = rows[target_idx]
     rid = (r.get("id") or "").strip() or str(target_idx + 1)
-
     product_type = (r.get("product_type") or "hat").strip().lower()
     style = (r.get("style") or "ai_art").strip().lower()
     placement = (r.get("placement") or "front").strip().lower()
@@ -556,191 +654,172 @@ def process_one(*, auto_seed: bool = True) -> bool:
     motif = (r.get("motif") or "").strip()
     include_text = (r.get("include_text") or "NO").strip().upper() in ("YES", "TRUE", "1")
 
+    r["started_at"] = r.get("started_at") or _now_iso()
+    r["finished_at"] = ""
+    r["error_stage"] = ""
+    r["error_message"] = ""
+    _set_stage(r, "CONCEPT_CHECK", f"row={rid} drop={drop} motif={motif}")
+    log(f"ℹ️ [row={rid}] publish stage=CONCEPT_CHECK")
+
     phrase = (r.get("phrase") or "").strip()
     if include_text and not phrase:
-        phrase = pick_phrase("90s nostalgia")
-        r["phrase"] = phrase
+        try:
+            phrase = pick_phrase("90s nostalgia")
+            r["phrase"] = phrase
+        except Exception as e:
+            _set_error(r, "PHRASE_PICK", e)
+            r["finished_at"] = _now_iso()
+            rows[target_idx] = r
+            save_queue(rows)
+            return False
 
-    # concept gate (embroidery-first; block only clearly invalid concepts)
     try:
         brief_gate = brief_from_row(r, include_text=include_text)
-        concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+        _, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+        r["concept_reasons"] = ",".join(concept_reasons)
         block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
         risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
-
         if block_reasons:
             r["concept_risk"] = "HIGH"
             r["quality_status"] = "FAIL"
             r["quality_reason"] = "concept:" + ",".join(block_reasons)
             r["status"] = "HOLD_QUALITY"
+            _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
+            r["finished_at"] = _now_iso()
             rows[target_idx] = r
             save_queue(rows)
-            log(f"🟨 Row {rid} failed concept gate: {r['quality_reason']}")
             return False
-
         if risk_reasons:
             r["concept_risk"] = "MEDIUM"
             r["quality_status"] = "REVIEW"
             r["quality_reason"] = "concept_review:" + ",".join(risk_reasons)
         else:
             r["concept_risk"] = "LOW"
-            if (r.get("quality_status") or "").strip().upper() == "REVIEW" and (r.get("quality_reason") or "").startswith("concept_review:"):
-                r["quality_status"] = ""
-                r["quality_reason"] = ""
     except Exception as e:
         r["concept_risk"] = "MEDIUM"
         r["quality_status"] = "REVIEW"
         r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
-        log(f"🟨 Row {rid} concept gate errored (continuing): {e}")
+        r["concept_reasons"] = f"concept_error:{type(e).__name__}:{e}"
 
-    # Risk gate
     risk_flag, risk_reason = _risk_check_row(r)
     r["risk_flag"] = risk_flag
     r["risk_reason"] = risk_reason
     if risk_flag == "REVIEW" and (r.get("policy_status", "") or "").strip().upper() != "APPROVED":
         r["status"] = "HOLD"
+        _set_stage(r, "HOLD", f"risk:{risk_reason}")
+        r["finished_at"] = _now_iso()
         rows[target_idx] = r
         save_queue(rows)
-        log(f"🟨 Row {rid} flagged for REVIEW: {risk_reason}. Set policy_status=APPROVED to proceed.")
         return False
 
-    # Drop limit gate BEFORE spending money/time
     limit = get_drop_limited(drop) if drop else 0
     if drop and limit and not can_publish(drop, limit):
         r["status"] = "SOLD_OUT"
+        _set_stage(r, "SOLD_OUT", "drop_limit_reached")
+        r["finished_at"] = _now_iso()
         rows[target_idx] = r
         save_queue(rows)
-        log(f"🟥 Drop limit reached for {drop} (limit={limit}). Row {rid} marked SOLD_OUT.")
         return False
 
     drop_display = get_drop_title(drop) if drop else ""
-    title = build_title(
-        "",
-        product_type=product_type,
-        drop=drop_display,
-        motif_hint=("Loading" if "loading" in motif.lower() else None),
-    )
+    title = build_title("", product_type=product_type, drop=drop_display, motif_hint=("Loading" if "loading" in motif.lower() else None))
+    description = build_description(title, "90s nostalgia", product_type=product_type, drop=drop_display, motif=motif, limited_count=get_drop_limited(drop) if drop else 0)
+    tags = [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()] + ["no filter", "nofilter", "90s"] + build_drop_tags(drop) + _analytics_tags(r)
 
-    description = build_description(
-        title,
-        "90s nostalgia",
-        product_type=product_type,
-        drop=drop_display,
-        motif=motif,
-        limited_count=get_drop_limited(drop) if drop else 0,
-    )
-
-    tags = [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()]
-    tags = tags + ["no filter", "nofilter", "90s"] + build_drop_tags(drop) + _analytics_tags(r)
-
-    # Build design + prompt hash + quality gate
-    want_prompt = _env_true("PROMPT_DEBUG", "0")
     try:
-        img, prompt_debug = build_design(
-            style=style,
-            title=title,
-            phrase=phrase,
-            niche="90s nostalgia",
-            placement=placement,
-            product_type=product_type,
-            drop=drop or None,
-            include_text=include_text,
-            brief_context=_brief_context_from_row(r),
-            validate_concept=False,
-            return_prompt=True,
-        )
+        _set_stage(r, "GENERATING", f"style={style}")
+        img, prompt_debug = build_design(style=style, title=title, phrase=phrase, niche="90s nostalgia", placement=placement, product_type=product_type, drop=drop or None, include_text=include_text, brief_context=_brief_context_from_row(r), validate_concept=False, return_prompt=True)
     except Exception as e:
-        r["status"] = "HOLD_ERROR"
-        r["risk_reason"] = f"gen_error:{type(e).__name__}:{e}"
+        _set_error(r, "DESIGN_GENERATION", e)
+        r["finished_at"] = _now_iso()
         rows[target_idx] = r
         save_queue(rows)
-        log(f"🟥 Row {rid} generation failed: {e}")
         return False
 
-    if want_prompt:
+    if _env_true("PROMPT_DEBUG", "0"):
         r["prompt_debug"] = prompt_debug
     r["prompt_hash"] = _sha1(prompt_debug)
     r["resolved_style"] = (r.get("style") or "").strip().lower()
 
-    # Save locally before quality gate so gate evaluates generated output artifact
     out_dir = os.getenv("OUT_DIR", "out")
     os.makedirs(out_dir, exist_ok=True)
     filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
     local_path = os.path.join(out_dir, filename)
-    img.save(local_path, "PNG")
-    r["local_path"] = local_path
+    try:
+        img.save(local_path, "PNG")
+        if not os.path.exists(local_path):
+            raise RuntimeError(f"image_save_missing:{local_path}")
+        r["local_path"] = local_path
+        _set_stage(r, "IMAGE_SAVED", local_path)
+    except Exception as e:
+        _set_error(r, "IMAGE_SAVE", e)
+        r["finished_at"] = _now_iso()
+        rows[target_idx] = r
+        save_queue(rows)
+        return False
 
+    _set_stage(r, "QUALITY_CHECK")
     ok, q_reason, q_json = pass_fail(img)
-    prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
-    prior_reason = (r.get("quality_reason") or "").strip()
-
     if ok:
-        r["quality_status"] = "REVIEW" if prior_review else "PASS"
-        r["quality_reason"] = prior_reason if prior_review else ""
+        r["quality_status"] = "PASS"
+        r["quality_reason"] = ""
     else:
         r["quality_status"] = "FAIL"
-        r["quality_reason"] = q_reason or ""
+        r["quality_reason"] = q_reason or "pass_fail returned false"
     try:
         r["quality_json"] = json.dumps(q_json)
     except Exception:
         r["quality_json"] = str(q_json)
-
     if not ok:
         r["status"] = "HOLD_QUALITY"
+        _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
+        r["finished_at"] = _now_iso()
         rows[target_idx] = r
         save_queue(rows)
-        log(f"🟨 Row {rid} failed quality gate: {q_reason}.")
         return False
 
-    # Upload to R2
-    r2_url = upload_file(local_path, key=f"nofilter/hats/{filename}")
-    r["r2_url"] = r2_url
+    try:
+        r2_url = upload_file(local_path, key=f"nofilter/hats/{filename}")
+        r["r2_url"] = r2_url
+    except Exception as e:
+        _set_error(r, "R2_UPLOAD", e)
+        r["finished_at"] = _now_iso()
+        rows[target_idx] = r
+        save_queue(rows)
+        return False
 
-    # Optional mockup
-    if _env_true("MAKE_MOCKUPS", "0"):
-        try:
+    try:
+        if _env_true("MAKE_MOCKUPS", "0"):
             mock = make_simple_hat_mockup(img)
             mock_name = filename.replace(".png", "_mockup.png")
             mock_path = os.path.join(out_dir, mock_name)
             mock.save(mock_path, "PNG")
-            mock_url = upload_file(mock_path, key=f"nofilter/mockups/{mock_name}")
-            r["mockup_r2_url"] = mock_url
-        except Exception as e:
-            log(f"🟨 Mockup step skipped: {e}")
+            r["mockup_r2_url"] = upload_file(mock_path, key=f"nofilter/mockups/{mock_name}")
+    except Exception as e:
+        _append_trace(r, f"MOCKUP_WARNING:{e}")
 
-    # Push to Printify + publish
-    blueprint_id = find_hat_blueprint()
-    provider_id = pick_print_provider(blueprint_id)
-    variants = get_variants(blueprint_id, provider_id)
-
-    # choose_hat_variant_ids may or may not support seed_key; do both safely
     try:
-        variant_ids = choose_hat_variant_ids(variants, seed_key=f"{rid}|{title}")
-    except TypeError:
-        variant_ids = choose_hat_variant_ids(variants)
-
-    price_usd = float(os.getenv("HAT_PRICE_USD", "34.00"))
-    price_cents = int(round(price_usd * 100))
-
-    shop_id = get_shop_id()
-    printify_image_id = upload_image_by_url(filename, r2_url)
-    r["printify_image_id"] = printify_image_id
-
-    product_id = create_hat_product(
-        shop_id=shop_id,
-        title=title,
-        description=description,
-        tags=tags,
-        blueprint_id=blueprint_id,
-        provider_id=provider_id,
-        variant_ids=variant_ids,
-        image_id=printify_image_id,
-        price_cents=price_cents,
-    )
-
-    publish_product(shop_id, product_id)
-
-    r["printify_product_id"] = str(product_id)
+        blueprint_id = find_hat_blueprint()
+        provider_id = pick_print_provider(blueprint_id)
+        variants = get_variants(blueprint_id, provider_id)
+        try:
+            variant_ids = choose_hat_variant_ids(variants, seed_key=f"{rid}|{title}")
+        except TypeError:
+            variant_ids = choose_hat_variant_ids(variants)
+        price_usd = float(os.getenv("HAT_PRICE_USD", "34.00"))
+        price_cents = int(round(price_usd * 100))
+        shop_id = get_shop_id()
+        printify_image_id = upload_image_by_url(filename, r2_url)
+        r["printify_image_id"] = printify_image_id
+        product_id = create_hat_product(shop_id=shop_id, title=title, description=description, tags=tags, blueprint_id=blueprint_id, provider_id=provider_id, variant_ids=variant_ids, image_id=printify_image_id, price_cents=price_cents)
+        publish_product(shop_id, product_id)
+        r["printify_product_id"] = str(product_id)
+    except Exception as e:
+        _set_error(r, "PUBLISH", e)
+        r["finished_at"] = _now_iso()
+        rows[target_idx] = r
+        save_queue(rows)
+        return False
 
     if drop:
         try:
@@ -748,13 +827,14 @@ def process_one(*, auto_seed: bool = True) -> bool:
         except Exception:
             pass
 
-    r["published_at"] = datetime.now(timezone.utc).isoformat()
+    r["published_at"] = _now_iso()
+    r["finished_at"] = _now_iso()
     r["status"] = "PUBLISHED"
-
+    _set_stage(r, "PUBLISHED", "publish complete")
     rows[target_idx] = r
     save_queue(rows)
 
-    log(f"✅ Published hat: row={rid} product_id={product_id}")
+    log(f"✅ Published hat: row={rid} product_id={r.get('printify_product_id','')}")
     return True
 
 
