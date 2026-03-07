@@ -1,41 +1,59 @@
 collection: 90s_Nostalgia_Hat_Drops
-version: v3
+version: v4
 
 safe_phrases:
-  - "NO FILTER"
-  - "OFFLINE MODE"
-  - "NO WIFI ZONE"
-  - "LOADING..."
-  - "BUFFERING..."
-  - "ANALOG ERA"
-  - "RECESS FOREVER"
-  - "STAY ANALOG"
-  - "SIGNAL LOST"
-  - "SAVED LOCALLY"
-  - "SYSTEM BUSY"
-  - "MALL KID"
-  - "AFTER SCHOOL"
-  - "DO NOT DISTURB"
-  - "Y2K CLUB"
-  - "LOW BATTERY"
-  - "MALL CERTIFIED"
+  - "PROBABLY BUFFERING"
   - "OFFLINE TODAY"
-  - "REWIND DEPT"
-  - "SNACK BREAK"
-  - "DIAL TONE"
-  - "LOADING FOREVER"
-  - "RENTAL COPY"
-  - "SEEN ONLINE"
+  - "ANALOG HEART"
+  - "LATE FEES DEPT"
+  - "AFTER SCHOOL CLUB"
+  - "LOW BATTERY CLUB"
+  - "REWIND SERVICE"
   - "USER BUSY"
+  - "CACHE MISS"
+  - "DO NOT DISTURB"
+  - "TOUCH GRASS LATER"
+  - "SEEN ONLINE"
+  - "SOFT REBOOT"
+  - "RENTAL COPY"
+
+merch_system:
+  design_mix:
+    text_first: 80
+    text_with_accent: 15
+    icon_only: 5
+  palette_families:
+    cream_green_red: ["#ffffff", "#01784e", "#cc3333"]
+    navy_cream: ["#333366", "#ffffff", "#96a1a8"]
+    black_cream: ["#000000", "#ffffff", "#a67843"]
+    tan_brown_red: ["#a67843", "#660000", "#e25c27"]
+    white_red_blue: ["#ffffff", "#cc3333", "#005397"]
+    forest_cream: ["#01784e", "#ffffff", "#7ba35a"]
+    slate_cream: ["#96a1a8", "#ffffff", "#333366"]
+    maroon_gold: ["#660000", "#ffcc00", "#a67843"]
+    vintage_blue_cream: ["#005397", "#3399ff", "#ffffff"]
+  composition_templates:
+    - bold_single_line
+    - stacked_two_line
+    - small_caps_service_mark
+    - faux_department_lockup
+    - varsity_wordmark
+    - retro_tech_wordmark
+    - icon_accent_left
+    - icon_accent_top
+    - monogram_subtitle
+    - club_mark
 
 palette_hints:
-  - "#000000 + #ffffff + #cc3333"
-  - "#000000 + #ffcc00 + #333366"
-  - "#005397 + #3399ff + #ffffff"
-  - "#01784e + #7ba35a + #a67843"
-  - "#660000 + #cc3333 + #e25c27"
-  - "#333366 + #6b5294 + #96a1a8"
-  - "#000000 + #96a1a8 + #ffffff"
+  - "cream_green_red"
+  - "navy_cream"
+  - "black_cream"
+  - "tan_brown_red"
+  - "white_red_blue"
+  - "forest_cream"
+  - "slate_cream"
+  - "maroon_gold"
+  - "vintage_blue_cream"
 
 embroidery_styles:
   - "front-center satin stitch emblem"
@@ -51,100 +69,57 @@ drops:
     vibe: "audio-video relic symbol world"
     embroidery_focus: "single strong center emblem"
     motifs:
-      - "cassette icon with bold tape windows and center label"
-      - "battery icon in low-charge state with thick bars"
-      - "rewind command emblem with double-triangle glyph and thick ring border"
-      - "VHS vault seal: cassette window icon inside shield frame"
-      - "tape rescue club emblem with compact cassette + bold repair cross"
-      - "CRT service label emblem with chunky screen icon and side knobs"
-      - "floppy archive stamp with 3.5 disk silhouette in circular seal"
-      - "weekend rental crest: tape stack icon framed in retro rectangle"
-      - "record-ready symbol system: dot + pause + rewind in one emblem"
-      - "analog frequency mark: thick waveform inside hard-edged crest"
+      - "cassette accent mark"
+      - "rewind service lockup"
+      - "CRT support badge"
+      - "floppy archive icon"
 
   - name: "Playground Core"
     slug: "playground-core"
     limited: 500
     vibe: "recess icon world with playful grit"
-    embroidery_focus: "bold direct-embroidery silhouette with simple mascot icon"
+    embroidery_focus: "bold direct-embroidery silhouette"
     motifs:
-      - "snack cup icon with simple straw and chunky silhouette"
-      - "club stamp icon with starburst center and heavy ring"
-      - "recess champion emblem with whistle icon and thick laurel frame"
-      - "hopscotch club emblem: stacked numbered blocks simplified to bold tiles"
-      - "after-school fuel emblem with lunch tray icon + sunburst border"
-      - "play-league crest: jump rope loop wrapped around center star"
-      - "notebook doodle shield with smile lightning mascot icon"
-      - "playground patrol symbol: slide silhouette inside circle"
-      - "chalk squad label with chunky chalk stick bundle and frame"
-      - "backpack crew emblem with zipper icon and heavy stitched border"
+      - "after school club lockup"
+      - "snack break service mark"
+      - "locker energy wordmark"
 
   - name: "Early Internet"
     slug: "early-internet"
     limited: 500
-    vibe: "dial-up utility icon world and glitch-office humor"
-    embroidery_focus: "compact center icon system, thick UI blocks"
+    vibe: "dial-up utility icon world"
+    embroidery_focus: "compact center icon system"
     motifs:
-      - "folder icon with corner fold and offline slash"
-      - "loading bar icon with five thick segments"
-      - "cursor icon with bold pointer and small spark"
-      - "connection lost emblem: signal bars crossed inside octagon"
-      - "buffer emblem with segmented loading bar and heavy frame"
-      - "error window emblem: simplified pop-up box with alert symbol"
-      - "cursor command seal: oversized pointer in circular ring"
-      - "modem tone mark: bold waveform stack in shield frame"
-      - "inbox offline label with envelope glyph + lock icon"
-      - "system reboot crest with power icon and arrow loop"
-      - "web portal emblem with chunky globe grid and frame"
+      - "loading bar accent"
+      - "cursor status mark"
+      - "connection lost lockup"
 
   - name: "Mall Culture"
     slug: "mall-culture"
     limited: 400
-    vibe: "food-court and arcade token symbol world"
-    embroidery_focus: "puff-friendly coin and icon silhouettes"
+    vibe: "food-court and arcade token world"
+    embroidery_focus: "puff-friendly coin/icon silhouettes"
     motifs:
-      - "receipt icon with short tear edge and two line blocks"
-      - "mall sign icon with directional arrow and star"
-      - "food court club emblem with tray icon in rounded rectangle"
-      - "arcade token seal with center star and thick coin rim"
-      - "open late insignia with ticket-stub frame and block type"
-      - "mall directory symbol: wayfinding arrow stack in square emblem"
-      - "neon court crest with pretzel/snack icon and spark corners"
-      - "roller rink night emblem with disco swirl in circular emblem"
-      - "weekend allowance emblem: coin stack icon + shield border"
-      - "parking lot meetup label with simple car-top silhouette"
+      - "mall certified wordmark"
+      - "food court VIP lockup"
+      - "arcade token accent"
 
   - name: "After School TV"
     slug: "after-school-tv"
     limited: 400
-    vibe: "living-room channel surf icon world"
+    vibe: "living-room channel surf world"
     embroidery_focus: "centered framed icon with minimal text"
     motifs:
-      - "remote icon with chunky directional pad"
-      - "tape stack icon with bold three-layer silhouette"
-      - "channel surf crest: CRT icon with rabbit-ear antenna"
-      - "please rewind service emblem with tape arrow symbol"
-      - "couch camp emblem: sofa silhouette in rounded shield"
-      - "snack break emblem with popcorn bucket icon and outer contour"
-      - "remote command label with chunky button grid"
-      - "guide grid insignia with 3x3 block schedule icon"
-      - "after-school signal emblem with antenna + wave bars"
-      - "tv stand archive emblem with stacked tape silhouette"
+      - "weekend rental mark"
+      - "rewind service label"
+      - "snack break crest"
 
   - name: "Y2K Minimal"
     slug: "y2k-minimal"
     limited: 350
     vibe: "future-club utility symbol world"
-    embroidery_focus: "clean center mark, thick geometric strokes"
+    embroidery_focus: "clean center mark, thick strokes"
     motifs:
-      - "pixel flame icon with stair-step silhouette"
-      - "moon and star icon duo with bold outlines"
-      - "offline symbol badge with crossed signal"
-      - "future club oval emblem with starburst center"
-      - "disc orbit emblem: CD circle + motion arc in hard frame"
-      - "flip-call crest with phone silhouette and signal bars"
-      - "pixel flame symbol inside capsule label"
-      - "chrome-era monogram block using two bold letters only"
-      - "spark core insignia: 4-point sparkle in shield border"
-      - "sync loop emblem with dual arrows and center dot"
-      - "night mode tag with crescent + grid bar icon"
+      - "offline symbol badge"
+      - "night mode tag"
+      - "sync loop emblem"

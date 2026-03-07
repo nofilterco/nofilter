@@ -621,6 +621,48 @@ SLOGAN_BANK: Dict[str, List[str]] = {
 
 NOSTALGIA_AXES = ["80s_analog", "90s_mall", "2000s_internet", "arcade_night", "after_school_tv", "home_computer_lab"]
 
+
+
+MERCH_DESIGN_FAMILIES = {
+    "text_first": 80,
+    "text_with_accent": 15,
+    "icon_only": 5,
+}
+
+CURATED_PALETTE_FAMILIES = {
+    "cream_green_red": ["#ffffff", "#01784e", "#cc3333"],
+    "navy_cream": ["#333366", "#ffffff", "#96a1a8"],
+    "black_cream": ["#000000", "#ffffff", "#a67843"],
+    "tan_brown_red": ["#a67843", "#660000", "#e25c27"],
+    "white_red_blue": ["#ffffff", "#cc3333", "#005397"],
+    "forest_cream": ["#01784e", "#ffffff", "#7ba35a"],
+    "slate_cream": ["#96a1a8", "#ffffff", "#333366"],
+    "maroon_gold": ["#660000", "#ffcc00", "#a67843"],
+    "vintage_blue_cream": ["#005397", "#3399ff", "#ffffff"],
+}
+
+COMPOSITION_TEMPLATES = {
+    "bold_single_line": {"max_words": 3, "font_pairing": "condensed_caps+understated_caps", "icon_support": "none", "tone": "direct"},
+    "stacked_two_line": {"max_words": 4, "font_pairing": "bold_sans+understated_caps", "icon_support": "optional", "tone": "balanced"},
+    "small_caps_service_mark": {"max_words": 4, "font_pairing": "understated_caps+retro_mono", "icon_support": "optional", "tone": "service"},
+    "faux_department_lockup": {"max_words": 4, "font_pairing": "varsity_block+understated_caps", "icon_support": "optional", "tone": "institutional"},
+    "varsity_wordmark": {"max_words": 2, "font_pairing": "varsity_block+understated_caps", "icon_support": "none", "tone": "club"},
+    "retro_tech_wordmark": {"max_words": 3, "font_pairing": "retro_mono+bold_sans", "icon_support": "optional", "tone": "tech"},
+    "icon_accent_left": {"max_words": 4, "font_pairing": "bold_sans+understated_caps", "icon_support": "required", "tone": "accent"},
+    "icon_accent_top": {"max_words": 4, "font_pairing": "condensed_caps+understated_caps", "icon_support": "required", "tone": "accent"},
+    "monogram_subtitle": {"max_words": 3, "font_pairing": "condensed_caps+retro_mono", "icon_support": "none", "tone": "premium"},
+    "club_mark": {"max_words": 4, "font_pairing": "varsity_block+retro_mono", "icon_support": "optional", "tone": "club"},
+}
+
+ACCENT_ICON_FAMILIES = [
+    "cassette", "loading bar", "cursor", "battery", "floppy", "crt", "joystick",
+    "popcorn", "pizza slice", "smiley", "moon/star", "arcade token", "receipt", "pager signal",
+]
+
+PHRASE_CATEGORIES = [
+    "nostalgia_status", "old_tech_status", "faux_departments", "faux_clubs", "faux_services", "dry_humor",
+    "low_energy_meme", "after_school_life", "mall_culture", "offline_lifestyle", "internet_lag", "analog_emotional",
+]
 ICON_LIBRARY = [
     "cassette", "crt", "floppy", "cursor", "loading bar", "joystick", "snack cup", "arcade token",
     "tape stack", "remote", "cable box", "pager", "folder", "smiley badge", "note card", "mall sign",
@@ -1018,147 +1060,179 @@ class DesignBrief:
     plate_dependency: str = "low"
     commercial_style_reason: str = ""
 
+    # Curated merch-plan metadata
+    design_family: str = "text_first"
+    slogan_family: str = ""
+    font_pairing: str = ""
+    palette_family: str = ""
+    composition_template: str = ""
+    accent_icon_family: str = "none"
+    merch_style: str = ""
+    phrase_category: str = ""
+    merch_taste_score: str = ""
+    reroll_reason: str = ""
+
 
 def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> DesignBrief:
     """
-    V4 picker used at seed time (Option B).
-    Returns a fully populated DesignBrief with anti-repetition fields.
-    Store these values in queue.csv so the design is stable through human review.
+    Curated merch-first brief picker.
+    Enforces coherent plan fields instead of independent random knobs.
     """
-    edgy_mode = _env_true("EDGY_MODE", "0")
+    from phrase_engine import pick_phrase, phrase_scores
 
     chosen = drop or random.choice(get_drop_names())
     meta = get_drop_meta(chosen)
     drop_slug = str(meta.get("slug") or slugify(chosen))
     drop_title = str(meta.get("title") or chosen)
 
-    motifs = get_drop_motifs(drop_slug) or get_drop_motifs(drop_title)
-    if not motifs:
-        motifs = ["memphis geometric emblem (triangles, squiggles, dots)"]
+    design_family = _pick_weighted([(k, v) for k, v in MERCH_DESIGN_FAMILIES.items()])
+    design_mode = {
+        "text_first": random.choice(["phrase_hat", "word_hat", "phrase_hat", "phrase_hat"]),
+        "text_with_accent": "icon_phrase_hat",
+        "icon_only": "icon_only",
+    }[design_family]
 
-    palette_hint = random.choice(get_palette_hints()) if get_palette_hints() else ""
-    emb_styles = get_embroidery_styles()
-    embroidery_style = random.choice(emb_styles) if emb_styles else ""
-    embroidery_focus = str(meta.get("embroidery_focus") or "")
-    vibe = str(meta.get("vibe") or "")
+    phrase_category = random.choice(PHRASE_CATEGORIES)
+    slogan_family = phrase_category
+    include_text = include_text or design_mode != "icon_only"
 
-    style = pick_style_for_drop(drop_slug)
-    tone = pick_tone_for_drop(drop_slug, edgy_mode=edgy_mode)
-    art_direction = random.choice(ART_DIRECTIONS)
-    visual_energy = random.choice(VISUAL_ENERGY_LEVELS)
+    phrase = pick_phrase(category_override=phrase_category) if include_text else ""
+    if design_mode == "word_hat" and phrase:
+        phrase = phrase.split()[0]
 
-    design_mode = _pick_weighted([
-        ("phrase_hat", 70),
-        ("word_hat", 20),
-        ("icon_phrase_hat", 10),
-        ("icon_only", 1),
-    ])
-    include_text = include_text or design_mode in ("phrase_hat", "word_hat", "icon_phrase_hat")
-    slogan_type = random.choice(list(SLOGAN_BANK.keys()))
-    humor_mode = random.choice(["deadpan", "understated", "club_irony", "low_energy", "status_humor"])
-    nostalgia_axis = random.choice(NOSTALGIA_AXES)
-    text_mode_by_design = {
-        "icon_only": "",
-        "phrase_hat": random.choice(["stacked_phrase", "arched_phrase", "clean_sans_caps", "retro_tech_mono"]),
-        "word_hat": random.choice(["bold_wordmark", "varsity_block", "clean_sans_caps"]),
-        "icon_phrase_hat": random.choice(["stacked_phrase", "clean_sans_caps", "retro_tech_mono"]),
-    }
-    text_mode = text_mode_by_design.get(design_mode, "clean_sans_caps")
+    palette_family = random.choice(list(CURATED_PALETTE_FAMILIES.keys()))
+    palette_hint = " + ".join(CURATED_PALETTE_FAMILIES[palette_family][:4])
 
-    layout_for_mode = {
-        "icon_only": ["icon_above_text"],
-        "phrase_hat": ["single_line_center", "two_line_stack", "arched_top"],
-        "word_hat": ["single_line_center", "arched_top"],
-        "icon_phrase_hat": ["icon_above_text", "small_icon_left"],
-    }
-    layout_archetype = random.choice(layout_for_mode.get(design_mode, LAYOUT_ARCHETYPES))
-    type_treatment = text_mode if include_text else "clean_sans_caps"
-    icon_treatment = random.choice(ICON_TREATMENTS)
-    frame_treatment = "none"
-
-    if include_text:
-        phrase = choose_slogan(humor_mode=humor_mode, slogan_type=slogan_type, max_chars=24)
-    else:
-        phrase = ""
-
-    motif_choices = motifs
-    if design_mode in ("icon_only", "icon_phrase_hat"):
-        motif_choices = motifs + [f"{random.choice(ICON_LIBRARY)} icon with thick silhouette"]
+    template_choices = [
+        name for name, cfg in COMPOSITION_TEMPLATES.items()
+        if (len(phrase.split()) if phrase else 1) <= int(cfg.get("max_words", 4))
+    ]
+    if design_mode == "icon_phrase_hat":
+        template_choices = [t for t in template_choices if t in ("icon_accent_left", "icon_accent_top", "club_mark", "retro_tech_wordmark")]
     if design_mode in ("phrase_hat", "word_hat"):
-        motif_choices = ["clean embroidery wordmark lockup", "short phrase typography lockup", "bold stitch-safe lettering"] + motif_choices
+        template_choices = [t for t in template_choices if t not in ("icon_accent_left", "icon_accent_top")]
+    if design_mode == "icon_only":
+        template_choices = ["club_mark"]
 
-    wearable_score = str(random.randint(7, 10))
-    novelty_score = str(random.randint(6, 10))
-    nostalgia_score = str(random.randint(7, 10))
-    clarity_score = str(random.randint(7, 10))
-    embroidery_score = str(random.randint(8, 10))
-    commercial_interest_reason = random.choice([
-        "recognizable motif with wearable deadpan nostalgia",
-        "short phrase with clear meme-adjacent status humor",
-        "era-coded icon concept with strong center silhouette",
-        "clean wordmark with subtle internet-native tone",
+    composition_template = random.choice(template_choices or list(COMPOSITION_TEMPLATES.keys()))
+    font_pairing = COMPOSITION_TEMPLATES[composition_template]["font_pairing"]
+
+    layout_map = {
+        "bold_single_line": "single_line_center",
+        "stacked_two_line": "two_line_stack",
+        "small_caps_service_mark": "single_line_center",
+        "faux_department_lockup": "two_line_stack",
+        "varsity_wordmark": "single_line_center",
+        "retro_tech_wordmark": "single_line_center",
+        "icon_accent_left": "small_icon_left",
+        "icon_accent_top": "icon_above_text",
+        "monogram_subtitle": "arched_top",
+        "club_mark": "icon_above_text" if design_mode == "icon_only" else "two_line_stack",
+    }
+    layout_archetype = layout_map.get(composition_template, "single_line_center")
+
+    accent_icon_family = "none"
+    if design_mode in ("icon_phrase_hat", "icon_only"):
+        accent_icon_family = random.choice(ACCENT_ICON_FAMILIES)
+
+    merch_style = random.choice([
+        "funny phrase hats", "nostalgic slogan hats", "subtle meme hats", "old-tech lifestyle hats",
+        "boutique novelty trucker hats", "premium souvenir hats",
     ])
-    commercial_style_reason = random.choice([
-        "boutique trucker cap energy with tight hierarchy and tasteful icon pairing",
-        "novelty streetwear lockup that feels intentional, not templated",
-        "premium souvenir styling with compact typography and iconic silhouette",
-        "retro tech club mark tuned for wearable humor and clean embroidery",
-    ])
+
+    p_scores = phrase_scores(phrase, phrase_category) if phrase else {
+        "wearable_score": 7, "humor_score": 6, "nostalgia_score": 7, "readability_score": 7, "novelty_score": 6,
+    }
+    typography_quality = max(1, min(10, p_scores["readability_score"] + (1 if design_mode != "icon_only" else -1)))
+    icon_quality = 8 if design_mode == "icon_phrase_hat" else (7 if design_mode == "icon_only" else 0)
+    hierarchy = 9 if design_mode in ("phrase_hat", "word_hat") else 8
+    balance = 8 if composition_template in ("icon_accent_left", "icon_accent_top") else 9
+    plate_dependency = "low"
+
+    merch_taste_score = int(round((
+        p_scores["wearable_score"] + p_scores["readability_score"] + p_scores["novelty_score"] +
+        max(6, typography_quality) + max(0, icon_quality) + hierarchy + balance
+    ) / 7.0))
+
+    reroll_reason = ""
+    if design_mode != "icon_only" and (p_scores["wearable_score"] < 7 or p_scores["readability_score"] < 7):
+        reroll_reason = "weak_phrase"
+    if design_mode == "icon_only" and accent_icon_family in ("none", "smiley"):
+        reroll_reason = "weak_icon_only"
+    if reroll_reason:
+        design_family = "text_first"
+        design_mode = "phrase_hat"
+        accent_icon_family = "none"
+        composition_template = random.choice(["bold_single_line", "stacked_two_line", "small_caps_service_mark"])
+        layout_archetype = layout_map[composition_template]
+        phrase = pick_phrase(category_override=phrase_category)
+        p_scores = phrase_scores(phrase, phrase_category)
+        icon_quality = 0
+        hierarchy = 9
+        balance = 9
+        typography_quality = max(7, p_scores["readability_score"])
+        merch_taste_score = int(round((p_scores["wearable_score"] + p_scores["readability_score"] + p_scores["novelty_score"] + typography_quality + hierarchy + balance) / 6.0))
+
+    motifs = get_drop_motifs(drop_slug) or ["retro tech motif"]
+    motif = random.choice(motifs)
+    if accent_icon_family != "none":
+        motif = f"{accent_icon_family} accent icon, small and text-supporting"
 
     return DesignBrief(
         drop=drop_slug,
         drop_title=drop_title,
-        motif=random.choice(motif_choices),
+        motif=motif,
         phrase=phrase,
         include_text=include_text,
         design_mode=design_mode,
-        text_mode=text_mode,
-        slogan_type=slogan_type,
-        humor_mode=humor_mode,
-        nostalgia_axis=nostalgia_axis,
-        wearable_score=wearable_score,
-        novelty_score=novelty_score,
-        nostalgia_score=nostalgia_score,
-        clarity_score=clarity_score,
-        embroidery_score=embroidery_score,
-        commercial_interest_reason=commercial_interest_reason,
-        style=style,
+        text_mode=random.choice(TYPE_TREATMENTS),
+        slogan_type=slogan_family,
+        humor_mode=random.choice(["deadpan", "understated", "club_irony", "low_energy", "status_humor"]),
+        nostalgia_axis=random.choice(NOSTALGIA_AXES),
+        wearable_score=str(p_scores["wearable_score"]),
+        novelty_score=str(p_scores["novelty_score"]),
+        nostalgia_score=str(p_scores["nostalgia_score"]),
+        clarity_score=str(p_scores["readability_score"]),
+        embroidery_score=str(max(7, min(10, p_scores["readability_score"]))),
+        commercial_interest_reason="curated typography-first merch concept",
+        style=pick_style_for_drop(drop_slug),
         palette_hint=palette_hint,
-        embroidery_style=embroidery_style,
-        embroidery_focus=embroidery_focus,
-        vibe=vibe,
-        tone=tone,
+        embroidery_style=random.choice(get_embroidery_styles()) if get_embroidery_styles() else "flat direct embroidery",
+        embroidery_focus=str(meta.get("embroidery_focus") or "centered front panel"),
+        vibe=str(meta.get("vibe") or "nostalgia"),
+        tone=pick_tone_for_drop(drop_slug, edgy_mode=_env_true("EDGY_MODE", "0")),
         micro_niche=random.choice(MICRO_NICHES),
         object_state=random.choice(OBJECT_STATES),
         era_situation=random.choice(ERA_SITUATIONS),
         texture_cue=random.choice(TEXTURE_CUES),
         variation_modifier=random.choice(VARIATION_MODIFIERS),
-        motif_family=random.choice(MOTIF_FAMILIES),
-        motif_frame=random.choice(MOTIF_FRAMES),
-        motif_keywords=", ".join(random.sample([
-            "bold silhouette",
-            "thick geometric stroke",
-            "flat fill",
-            "single emblem",
-            "centered weight",
-            "clean negative space",
-            "direct embroidery",
-            "vector clean edges",
-        ], 3)),
-        center_weight=random.choice(["strong", "strong", "medium"]),
-        silhouette_strength=random.choice(["iconic", "iconic", "solid"]),
-        art_direction=art_direction,
+        motif_family=("text_lockup" if design_mode != "icon_only" else "symbol"),
+        motif_frame="none",
+        motif_keywords="curated merch, typography first, embroidery safe",
+        center_weight="strong",
+        silhouette_strength="solid",
+        art_direction=random.choice(ART_DIRECTIONS),
         layout_archetype=layout_archetype,
-        type_treatment=type_treatment,
-        icon_treatment=icon_treatment,
-        frame_treatment=frame_treatment,
-        visual_energy=visual_energy,
-        hierarchy_score=str(random.randint(7, 10)),
-        visual_balance_score=str(random.randint(7, 10)),
-        typography_quality_score=str(random.randint(7, 10)) if include_text else "",
-        icon_quality_score=str(random.randint(7, 10)) if design_mode in ("icon_phrase_hat", "icon_only") else "",
-        plate_dependency="low",
-        commercial_style_reason=commercial_style_reason,
+        type_treatment=font_pairing,
+        icon_treatment=("accent_micro" if accent_icon_family != "none" else "none"),
+        frame_treatment="none",
+        visual_energy="balanced",
+        hierarchy_score=str(hierarchy),
+        visual_balance_score=str(balance),
+        typography_quality_score=str(typography_quality) if design_mode != "icon_only" else "",
+        icon_quality_score=str(icon_quality) if design_mode in ("icon_phrase_hat", "icon_only") else "",
+        plate_dependency=plate_dependency,
+        commercial_style_reason="coherent curated merch plan",
+        design_family=design_family,
+        slogan_family=slogan_family,
+        font_pairing=font_pairing,
+        palette_family=palette_family,
+        composition_template=composition_template,
+        accent_icon_family=accent_icon_family,
+        merch_style=merch_style,
+        phrase_category=phrase_category,
+        merch_taste_score=str(max(1, min(10, merch_taste_score))),
+        reroll_reason=reroll_reason,
     )
 
 
@@ -1284,6 +1358,16 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
         icon_quality_score=(row.get("icon_quality_score") or "").strip(),
         plate_dependency=(row.get("plate_dependency") or "low").strip(),
         commercial_style_reason=(row.get("commercial_style_reason") or "").strip(),
+        design_family=(row.get("design_family") or "text_first").strip(),
+        slogan_family=(row.get("slogan_family") or "").strip(),
+        font_pairing=(row.get("font_pairing") or "").strip(),
+        palette_family=(row.get("palette_family") or "").strip(),
+        composition_template=(row.get("composition_template") or "").strip(),
+        accent_icon_family=(row.get("accent_icon_family") or "none").strip(),
+        merch_style=(row.get("merch_style") or "").strip(),
+        phrase_category=(row.get("phrase_category") or "").strip(),
+        merch_taste_score=(row.get("merch_taste_score") or "").strip(),
+        reroll_reason=(row.get("reroll_reason") or "").strip(),
     )
 
 
