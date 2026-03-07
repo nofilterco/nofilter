@@ -28,6 +28,19 @@ STRICT_EMBROIDERY_STYLE_RULES = (
 )
 
 
+def _commercial_interest_ok(brief) -> bool:
+    motif = (getattr(brief, "motif", "") or "").strip().lower()
+    phrase = (getattr(brief, "phrase", "") or "").strip()
+    design_mode = (getattr(brief, "design_mode", "icon_only") or "icon_only").strip().lower()
+    if phrase and len(phrase) >= 3:
+        return True
+    if design_mode == "icon_only":
+        banned = ["triangle", "oval", "circle", "dot", "abstract", "geometry"]
+        if sum(1 for b in banned if b in motif) >= 2:
+            return False
+    return len(motif) >= 6
+
+
 def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     h = (hex_color or "").strip().lstrip("#")
     if len(h) != 6:
@@ -163,11 +176,36 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
     stroke = max(6, int(CANVAS_HAT[0] * 0.005))
 
     shape_mode = resolved_style
+    design_mode = (getattr(brief, "design_mode", "icon_only") or "icon_only").strip().lower()
+    text_mode = (getattr(brief, "text_mode", "") or "").strip().lower()
     if shape_mode in ("text-lockup", "wordmark-icon") and brief.phrase:
         shape_mode = "direct-front-graphic"
 
     x0, y0, x1, y1 = bbox
-    if shape_mode in ("centered-emblem", "direct-front-graphic", "bold-icon-block"):
+    motif = (getattr(brief, "motif", "") or "").lower()
+    if "cassette" in motif or "tape" in motif:
+        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.12), fill=primary + (255,), outline=accent + (255,), width=stroke)
+        win_w, win_h = int(motif_w * 0.22), int(motif_h * 0.28)
+        draw.rounded_rectangle((cx - win_w - 10, cy - win_h // 2, cx - 10, cy + win_h // 2), radius=8, fill=accent2 + (255,))
+        draw.rounded_rectangle((cx + 10, cy - win_h // 2, cx + win_w + 10, cy + win_h // 2), radius=8, fill=accent2 + (255,))
+        draw.rectangle((cx - motif_w // 8, cy + motif_h // 6, cx + motif_w // 8, cy + motif_h // 6 + stroke * 2), fill=accent3 + (255,))
+    elif "crt" in motif or "monitor" in motif or "screen" in motif:
+        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.1), fill=primary + (255,), outline=accent + (255,), width=stroke)
+        inset = int(motif_w * 0.12)
+        draw.rectangle((x0 + inset, y0 + inset, x1 - inset, y1 - inset - stroke * 3), fill=accent2 + (255,))
+        draw.rectangle((cx - motif_w // 10, y1 - inset - stroke * 2, cx + motif_w // 10, y1 - inset), fill=accent3 + (255,))
+    elif "battery" in motif:
+        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.12), fill=primary + (255,), outline=accent + (255,), width=stroke)
+        draw.rectangle((x1, cy - motif_h // 8, x1 + stroke * 2, cy + motif_h // 8), fill=accent + (255,))
+        draw.rectangle((x0 + stroke * 2, y0 + stroke * 2, x0 + motif_w // 3, y1 - stroke * 2), fill=accent2 + (255,))
+    elif "loading" in motif or "buffer" in motif:
+        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.2), fill=primary + (255,), outline=accent + (255,), width=stroke)
+        seg_w = int((motif_w * 0.72) / 5)
+        sx = cx - int(motif_w * 0.36)
+        for i in range(5):
+            col = accent2 if i < 3 else bg
+            draw.rectangle((sx + i * seg_w, cy - motif_h // 8, sx + i * seg_w + seg_w - 5, cy + motif_h // 8), fill=col + (255,))
+    elif shape_mode in ("centered-emblem", "direct-front-graphic", "bold-icon-block"):
         draw.ellipse(bbox, fill=primary + (255,), outline=accent + (255,), width=stroke)
         in_pad = int(motif_w * 0.22)
         draw.polygon([(cx, y0 + in_pad), (x1 - in_pad, y1 - in_pad), (x0 + in_pad, y1 - in_pad)], fill=accent2 + (255,))
@@ -191,17 +229,41 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
         pad = stroke * 2
         draw.rounded_rectangle((x0 - pad, y0 - pad, x1 + pad, y1 + pad), radius=int(motif_h * 0.2), outline=accent3 + (255,), width=stroke)
 
-    if brief.include_text and brief.phrase and len(brief.phrase) <= 14:
-        font = _load_font(os.path.join("assets", "fonts", "Montserrat-Bold.ttf"), max(38, int(motif_h * 0.12)))
-        tb = draw.textbbox((0, 0), brief.phrase.upper(), font=font)
-        tw = tb[2] - tb[0]
-        tx = cx - tw // 2
-        ty = min(safe_y1 - (tb[3] - tb[1]) - 4, y1 + 8)
-        draw.text((tx, ty), brief.phrase.upper(), font=font, fill=accent + (255,))
+    if brief.include_text and brief.phrase and len(brief.phrase) <= 22:
+        font = _load_font(os.path.join("assets", "fonts", "Montserrat-Bold.ttf"), max(36, int(motif_h * 0.12)))
+        text = brief.phrase.upper()
+        if design_mode in ("text_only", "short_quote", "meme_phrase", "nostalgia_wordmark"):
+            if text_mode == "stacked_two_line" and " " in text:
+                words = text.split()
+                mid = max(1, len(words) // 2)
+                lines = [" ".join(words[:mid]), " ".join(words[mid:])]
+                h = 0
+                bbs = []
+                for ln in lines:
+                    b = draw.textbbox((0, 0), ln, font=font)
+                    bbs.append(b)
+                    h += (b[3] - b[1]) + 10
+                y = cy - h // 2
+                for i, ln in enumerate(lines):
+                    b = bbs[i]
+                    tx = cx - (b[2] - b[0]) // 2
+                    draw.text((tx, y), ln, font=font, fill=accent + (255,))
+                    y += (b[3] - b[1]) + 10
+            else:
+                tb = draw.textbbox((0, 0), text, font=font)
+                tx = cx - (tb[2] - tb[0]) // 2
+                ty = cy - (tb[3] - tb[1]) // 2
+                draw.text((tx, ty), text, font=font, fill=accent + (255,))
+        else:
+            tb = draw.textbbox((0, 0), text, font=font)
+            tw = tb[2] - tb[0]
+            tx = cx - tw // 2
+            ty = min(safe_y1 - (tb[3] - tb[1]) - 4, y1 + 8)
+            draw.text((tx, ty), text, font=font, fill=accent + (255,))
 
     safe_fill = motif_w / float(HAT_SAFE_AREA[0])
     meta = {
-        "composition_mode": "single_centered_emblem",
+        "composition_mode": f"{design_mode}_centered",
         "background_mode": "transparent",
         "frame_mode": frame_mode,
         "safe_area_fill_pct": f"{safe_fill:.3f}",
@@ -252,6 +314,9 @@ def build_design(
             blocked = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
             if blocked:
                 raise ValueError(f"Embroidery concept rejected: {','.join(blocked)}")
+
+        if not _commercial_interest_ok(brief):
+            raise ValueError("Embroidery concept rejected: commercial_interest_low")
 
         vector_first = (os.getenv("HAT_VECTOR_MODE", "1").strip().lower() in ("1", "true", "yes", "on"))
         prompt = build_product_prompt(brief, product_type=product_type)

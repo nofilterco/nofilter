@@ -194,6 +194,17 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "motif_keywords",
         "center_weight",
         "silhouette_strength",
+        "design_mode",
+        "text_mode",
+        "slogan_type",
+        "humor_mode",
+        "nostalgia_axis",
+        "wearable_score",
+        "novelty_score",
+        "nostalgia_score",
+        "clarity_score",
+        "embroidery_score",
+        "commercial_interest_reason",
         "product_rules",
     ):
         if extra not in fieldnames:
@@ -284,6 +295,17 @@ def _brief_context_from_row(r: dict) -> dict:
         "motif_keywords": r.get("motif_keywords", "") or "",
         "center_weight": r.get("center_weight", "") or "",
         "silhouette_strength": r.get("silhouette_strength", "") or "",
+        "design_mode": r.get("design_mode", "") or "",
+        "text_mode": r.get("text_mode", "") or "",
+        "slogan_type": r.get("slogan_type", "") or "",
+        "humor_mode": r.get("humor_mode", "") or "",
+        "nostalgia_axis": r.get("nostalgia_axis", "") or "",
+        "wearable_score": r.get("wearable_score", "") or "",
+        "novelty_score": r.get("novelty_score", "") or "",
+        "nostalgia_score": r.get("nostalgia_score", "") or "",
+        "clarity_score": r.get("clarity_score", "") or "",
+        "embroidery_score": r.get("embroidery_score", "") or "",
+        "commercial_interest_reason": r.get("commercial_interest_reason", "") or "",
         # style is handled separately by design_factory via `style=` arg and/or brief.style
     }
 
@@ -306,10 +328,18 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
         except Exception:
             pass
 
+    balanced_modes = ["icon_only", "text_only", "icon_plus_text", "short_quote"]
     for i in range(1, count + 1):
         new_id = str(max_id + i)
 
+        # balanced default mix for commercial hat types
         brief = pick_brief(drop=drop or None, include_text=include_text)
+        forced_mode = balanced_modes[(i - 1) % len(balanced_modes)]
+        if count >= 4:
+            brief.design_mode = forced_mode
+            brief.include_text = forced_mode != "icon_only"
+            if brief.include_text and not getattr(brief, "phrase", ""):
+                brief.phrase = pick_phrase("nostalgia")
 
         # Use V4’s weighted style (do NOT randomize here) – but keep fallback
         style = getattr(brief, "style", "") or random.choice(STYLE_CHOICES)
@@ -348,10 +378,21 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "motif_keywords": getattr(brief, "motif_keywords", ""),
                 "center_weight": getattr(brief, "center_weight", ""),
                 "silhouette_strength": getattr(brief, "silhouette_strength", ""),
+                "design_mode": getattr(brief, "design_mode", "icon_only"),
+                "text_mode": getattr(brief, "text_mode", ""),
+                "slogan_type": getattr(brief, "slogan_type", ""),
+                "humor_mode": getattr(brief, "humor_mode", ""),
+                "nostalgia_axis": getattr(brief, "nostalgia_axis", ""),
+                "wearable_score": getattr(brief, "wearable_score", ""),
+                "novelty_score": getattr(brief, "novelty_score", ""),
+                "nostalgia_score": getattr(brief, "nostalgia_score", ""),
+                "clarity_score": getattr(brief, "clarity_score", ""),
+                "embroidery_score": getattr(brief, "embroidery_score", ""),
+                "commercial_interest_reason": getattr(brief, "commercial_interest_reason", ""),
                 "product_rules": "hat_front:1200x675@300dpi|safe:3.5x2.0in|max_colors:6",
                 "style": style,
-                "include_text": "YES" if include_text else "NO",
-                "phrase": getattr(brief, "phrase", "") if include_text else "",
+                "include_text": "YES" if getattr(brief, "include_text", include_text) else "NO",
+                "phrase": getattr(brief, "phrase", "") if getattr(brief, "include_text", include_text) else "",
                 "niche": "90s nostalgia",
                 "tags": tags_str,
                 "placement": "front",

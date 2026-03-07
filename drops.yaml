@@ -17,6 +17,16 @@ safe_phrases:
   - "AFTER SCHOOL"
   - "DO NOT DISTURB"
   - "Y2K CLUB"
+  - "LOW BATTERY"
+  - "MALL CERTIFIED"
+  - "OFFLINE TODAY"
+  - "REWIND DEPT"
+  - "SNACK BREAK"
+  - "DIAL TONE"
+  - "LOADING FOREVER"
+  - "RENTAL COPY"
+  - "SEEN ONLINE"
+  - "USER BUSY"
 
 palette_hints:
   - "#000000 + #ffffff + #cc3333"
@@ -41,6 +51,8 @@ drops:
     vibe: "audio-video relic symbol world"
     embroidery_focus: "single strong center emblem"
     motifs:
+      - "cassette icon with bold tape windows and center label"
+      - "battery icon in low-charge state with thick bars"
       - "rewind command emblem with double-triangle glyph and thick ring border"
       - "VHS vault seal: cassette window icon inside shield frame"
       - "tape rescue club emblem with compact cassette + bold repair cross"
@@ -56,6 +68,8 @@ drops:
     vibe: "recess icon world with playful grit"
     embroidery_focus: "bold direct-embroidery silhouette with simple mascot icon"
     motifs:
+      - "snack cup icon with simple straw and chunky silhouette"
+      - "club stamp icon with starburst center and heavy ring"
       - "recess champion emblem with whistle icon and thick laurel frame"
       - "hopscotch club emblem: stacked numbered blocks simplified to bold tiles"
       - "after-school fuel emblem with lunch tray icon + sunburst border"
@@ -71,6 +85,9 @@ drops:
     vibe: "dial-up utility icon world and glitch-office humor"
     embroidery_focus: "compact center icon system, thick UI blocks"
     motifs:
+      - "folder icon with corner fold and offline slash"
+      - "loading bar icon with five thick segments"
+      - "cursor icon with bold pointer and small spark"
       - "connection lost emblem: signal bars crossed inside octagon"
       - "buffer emblem with segmented loading bar and heavy frame"
       - "error window emblem: simplified pop-up box with alert symbol"
@@ -86,6 +103,8 @@ drops:
     vibe: "food-court and arcade token symbol world"
     embroidery_focus: "puff-friendly coin and icon silhouettes"
     motifs:
+      - "receipt icon with short tear edge and two line blocks"
+      - "mall sign icon with directional arrow and star"
       - "food court club emblem with tray icon in rounded rectangle"
       - "arcade token seal with center star and thick coin rim"
       - "open late insignia with ticket-stub frame and block type"
@@ -101,6 +120,8 @@ drops:
     vibe: "living-room channel surf icon world"
     embroidery_focus: "centered framed icon with minimal text"
     motifs:
+      - "remote icon with chunky directional pad"
+      - "tape stack icon with bold three-layer silhouette"
       - "channel surf crest: CRT icon with rabbit-ear antenna"
       - "please rewind service emblem with tape arrow symbol"
       - "couch camp emblem: sofa silhouette in rounded shield"
@@ -116,6 +137,9 @@ drops:
     vibe: "future-club utility symbol world"
     embroidery_focus: "clean center mark, thick geometric strokes"
     motifs:
+      - "pixel flame icon with stair-step silhouette"
+      - "moon and star icon duo with bold outlines"
+      - "offline symbol badge with crossed signal"
       - "future club oval emblem with starburst center"
       - "disc orbit emblem: CD circle + motion arc in hard frame"
       - "flip-call crest with phone silhouette and signal bars"
