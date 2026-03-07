@@ -18,6 +18,13 @@ from nostalgia_blueprint import (
 
 CANVAS_TEE = (4500, 5400)
 CANVAS_HAT = (HAT_TEMPLATE["width_px"], HAT_TEMPLATE["height_px"])
+HAT_SAFE_AREA = (1000, 550)
+
+STRICT_EMBROIDERY_STYLE_RULES = (
+    "flat vector icon, solid color fills, bold embroidery outlines, minimum 4px strokes, "
+    "no texture, no grain, no shadow, no gradients, no shading, no distressed or vintage effects, "
+    "embroidery patch style graphic, badge emblem, bold vector icon"
+)
 
 
 def _load_font(font_path: Optional[str], size: int) -> ImageFont.FreeTypeFont:
@@ -142,6 +149,44 @@ def make_ai_art(prompt: str, *, canvas: Tuple[int, int]) -> Image.Image:
     return base
 
 
+def _scale_hat_to_safe_area(img: Image.Image) -> Image.Image:
+    """Scale motif to embroidery-safe proportions and keep transparent background."""
+    img = img.convert("RGBA")
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return img
+
+    motif = img.crop(bbox)
+    mw, mh = motif.size
+    if mw <= 0 or mh <= 0:
+        return img
+
+    target_width = int(CANVAS_HAT[0] * 0.8)  # 75–85% target range
+    min_safe_height = int(HAT_SAFE_AREA[1] * 0.60)
+
+    scale_w = target_width / float(mw)
+    scale_h = min_safe_height / float(mh)
+    scale = max(scale_w, scale_h)
+
+    max_w = int(HAT_SAFE_AREA[0])
+    max_h = int(HAT_SAFE_AREA[1])
+    scale = min(scale, max_w / float(mw), max_h / float(mh))
+    if scale <= 0:
+        return img
+
+    new_size = (max(1, int(mw * scale)), max(1, int(mh * scale)))
+    motif = motif.resize(new_size, resample=Image.Resampling.LANCZOS)
+
+    out = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
+    safe_x0 = (CANVAS_HAT[0] - HAT_SAFE_AREA[0]) // 2
+    safe_y0 = (CANVAS_HAT[1] - HAT_SAFE_AREA[1]) // 2
+    x = safe_x0 + (HAT_SAFE_AREA[0] - motif.size[0]) // 2
+    y = safe_y0 + (HAT_SAFE_AREA[1] - motif.size[1]) // 2
+    out.paste(motif, (x, y), mask=motif.getchannel("A"))
+    return out
+
+
 def build_design(
     style: str,
     title: str,
@@ -209,7 +254,10 @@ def build_design(
                 raise ValueError(f"Embroidery concept rejected: {','.join(block_reasons)}")
 
         prompt = build_product_prompt(brief, product_type=product_type)
+        prompt = f"{prompt} Strict style rules: {STRICT_EMBROIDERY_STYLE_RULES}."
         img = make_ai_art(prompt, canvas=CANVAS_HAT)
+        img = _scale_hat_to_safe_area(img)
+        img = img.convert("P", palette=Image.ADAPTIVE, colors=MAX_THREAD_COLORS).convert("RGBA")
         img = quantize_rgba(img, colors=MAX_THREAD_COLORS)
         try:
             img.info["dpi"] = (HAT_TEMPLATE["dpi"], HAT_TEMPLATE["dpi"])
@@ -236,7 +284,7 @@ def build_design(
     prompt = (
         f"Professional high-detail t-shirt graphic inspired by {niche}. "
         "Single large central subject, bold silhouette, strong contrast, clean edges, "
-        "vector/screenprint style, transparent background, no text, no watermark."
+        f"vector/screenprint style, transparent background, no text, no watermark. Style rules: {STRICT_EMBROIDERY_STYLE_RULES}."
     )
     img = make_ai_art(prompt, canvas=CANVAS_TEE)
     if return_prompt:

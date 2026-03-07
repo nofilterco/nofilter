@@ -1,5 +1,5 @@
 import os
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 
 
 def _env_float(name: str, default: float) -> float:
@@ -72,12 +72,27 @@ def score_png(img: Image.Image) -> dict:
     }
 
 
-# Local import to keep module load cheap
-from PIL import ImageFilter
 
+
+
+def auto_quantize_to_6_colors(img: Image.Image, colors: int = QG_MAX_COLORS) -> Image.Image:
+    img = img.convert("RGBA")
+    alpha = img.getchannel("A")
+    quantized = img.convert("P", palette=Image.ADAPTIVE, colors=max(2, int(colors))).convert("RGBA")
+    quantized.putalpha(alpha)
+    return quantized
 
 def pass_fail(img: Image.Image) -> tuple[bool, str, dict]:
-    s = score_png(img)
+    img_to_check = img.convert("RGBA")
+    s = score_png(img_to_check)
+
+    if s["color_count"] > QG_MAX_COLORS:
+        img_to_check = auto_quantize_to_6_colors(img_to_check, colors=QG_MAX_COLORS)
+        s = score_png(img_to_check)
+        s["auto_quantized"] = True
+    else:
+        s["auto_quantized"] = False
+
     cov = s["coverage"]
     con = s["contrast"]
     if cov < QG_MIN_COVERAGE:
@@ -86,7 +101,7 @@ def pass_fail(img: Image.Image) -> tuple[bool, str, dict]:
         return False, "too_full", s
     if con < QG_MIN_CONTRAST:
         return False, "low_contrast", s
-    if s["color_count"] > QG_MAX_COLORS + 2:  # small tolerance for anti-aliasing
+    if s["color_count"] > QG_MAX_COLORS:
         return False, "too_many_colors", s
     if s["center_coverage"] < QG_MIN_CENTER_COVERAGE:
         return False, "off_center_composition", s

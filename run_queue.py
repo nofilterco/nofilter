@@ -147,6 +147,7 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "concept_risk",
         "quality_reason",
         "quality_json",
+        "detected_color_count",
         "pipeline_stage",
         "concept_reasons",
         "error_stage",
@@ -542,6 +543,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
             r["quality_json"] = json.dumps(q_json)
         except Exception:
             r["quality_json"] = str(q_json)
+        r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
 
         if not ok:
             r["status"] = "HOLD_QUALITY"
@@ -770,6 +772,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         r["quality_json"] = json.dumps(q_json)
     except Exception:
         r["quality_json"] = str(q_json)
+    r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
     if not ok:
         r["status"] = "HOLD_QUALITY"
         _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
