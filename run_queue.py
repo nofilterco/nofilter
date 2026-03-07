@@ -17,7 +17,13 @@ from design_factory import build_design
 from mockup_factory import make_simple_hat_mockup
 from quality_gate import pass_fail
 from r2_upload import upload_file
-from nostalgia_blueprint import pick_brief, detect_risk, STYLE_CHOICES
+from nostalgia_blueprint import (
+    pick_brief,
+    detect_risk,
+    STYLE_CHOICES,
+    brief_from_row,
+    evaluate_embroidery_concept,
+)
 from drops import get_drop_names, get_drop_limited, build_drop_tags, get_drop_title
 from drop_limits import can_publish, increment
 
@@ -116,6 +122,12 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "era_situation",
         "texture_cue",
         "variation_modifier",
+        "motif_family",
+        "motif_frame",
+        "motif_keywords",
+        "center_weight",
+        "silhouette_strength",
+        "product_rules",
     ):
         if extra not in fieldnames:
             fieldnames.append(extra)
@@ -200,6 +212,11 @@ def _brief_context_from_row(r: dict) -> dict:
         "era_situation": r.get("era_situation", "") or "",
         "texture_cue": r.get("texture_cue", "") or "",
         "variation_modifier": r.get("variation_modifier", "") or "",
+        "motif_family": r.get("motif_family", "") or "",
+        "motif_frame": r.get("motif_frame", "") or "",
+        "motif_keywords": r.get("motif_keywords", "") or "",
+        "center_weight": r.get("center_weight", "") or "",
+        "silhouette_strength": r.get("silhouette_strength", "") or "",
         # style is handled separately by design_factory via `style=` arg and/or brief.style
     }
 
@@ -259,6 +276,12 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "era_situation": getattr(brief, "era_situation", ""),
                 "texture_cue": getattr(brief, "texture_cue", ""),
                 "variation_modifier": getattr(brief, "variation_modifier", ""),
+                "motif_family": getattr(brief, "motif_family", ""),
+                "motif_frame": getattr(brief, "motif_frame", ""),
+                "motif_keywords": getattr(brief, "motif_keywords", ""),
+                "center_weight": getattr(brief, "center_weight", ""),
+                "silhouette_strength": getattr(brief, "silhouette_strength", ""),
+                "product_rules": "hat_front:1200x675@300dpi|safe:3.5x2.0in|max_colors:6",
                 "style": style,
                 "include_text": "YES" if include_text else "NO",
                 "phrase": getattr(brief, "phrase", "") if include_text else "",
@@ -335,6 +358,25 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                 failed += 1
                 continue
 
+        # concept gate (embroidery-first)
+        try:
+            brief_gate = brief_from_row(r, include_text=include_text)
+            concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+            if not concept_ok:
+                r["quality_status"] = "FAIL"
+                r["quality_reason"] = "concept:" + ",".join(concept_reasons)
+                r["status"] = "HOLD_QUALITY"
+                rows[idx] = r
+                failed += 1
+                continue
+        except Exception as e:
+            r["quality_status"] = "FAIL"
+            r["quality_reason"] = f"concept_error:{type(e).__name__}"
+            r["status"] = "HOLD_QUALITY"
+            rows[idx] = r
+            failed += 1
+            continue
+
         # risk gate
         risk_flag, risk_reason = _risk_check_row(r)
         r["risk_flag"] = risk_flag
@@ -376,7 +418,19 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
 
         # prompt logging
         if want_prompt:
-            r["prompt_debug"] = prompt_debug
+            try:
+                r["prompt_debug"] = json.dumps({
+                    "prompt": prompt_debug,
+                    "product_type": product_type,
+                    "drop": drop,
+                    "motif": motif,
+                    "style": style,
+                    "motif_family": r.get("motif_family", ""),
+                    "motif_frame": r.get("motif_frame", ""),
+                    "motif_keywords": r.get("motif_keywords", ""),
+                }, ensure_ascii=False)
+            except Exception:
+                r["prompt_debug"] = prompt_debug
         r["prompt_hash"] = _sha1(prompt_debug)
 
         # resolved style bookkeeping (best-effort; design_factory resolves internally)
@@ -487,6 +541,27 @@ def process_one(*, auto_seed: bool = True) -> bool:
     if include_text and not phrase:
         phrase = pick_phrase("90s nostalgia")
         r["phrase"] = phrase
+
+    # concept gate (embroidery-first)
+    try:
+        brief_gate = brief_from_row(r, include_text=include_text)
+        concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
+        if not concept_ok:
+            r["quality_status"] = "FAIL"
+            r["quality_reason"] = "concept:" + ",".join(concept_reasons)
+            r["status"] = "HOLD_QUALITY"
+            rows[target_idx] = r
+            save_queue(rows)
+            log(f"🟨 Row {rid} failed concept gate: {r['quality_reason']}")
+            return False
+    except Exception as e:
+        r["quality_status"] = "FAIL"
+        r["quality_reason"] = f"concept_error:{type(e).__name__}"
+        r["status"] = "HOLD_QUALITY"
+        rows[target_idx] = r
+        save_queue(rows)
+        log(f"🟨 Row {rid} concept gate errored: {e}")
+        return False
 
     # Risk gate
     risk_flag, risk_reason = _risk_check_row(r)

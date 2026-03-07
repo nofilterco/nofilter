@@ -8,14 +8,16 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 from openai_image import generate_image_pil
 from nostalgia_blueprint import (
     pick_brief,
-    build_hat_prompt,
+    build_product_prompt,
+    evaluate_embroidery_concept,
     detect_risk,
     MAX_THREAD_COLORS,
     STYLE_DIRECTIVES,
+    HAT_TEMPLATE,
 )
 
 CANVAS_TEE = (4500, 5400)
-CANVAS_HAT = (3000, 3000)
+CANVAS_HAT = (HAT_TEMPLATE["width_px"], HAT_TEMPLATE["height_px"])
 
 
 def _load_font(font_path: Optional[str], size: int) -> ImageFont.FreeTypeFont:
@@ -199,9 +201,17 @@ def build_design(
 
         brief.style = resolved_style
 
-        prompt = build_hat_prompt(brief)
+        concept_ok, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
+        if not concept_ok:
+            raise ValueError(f"Embroidery concept rejected: {','.join(concept_reasons)}")
+
+        prompt = build_product_prompt(brief, product_type=product_type)
         img = make_ai_art(prompt, canvas=CANVAS_HAT)
         img = quantize_rgba(img, colors=MAX_THREAD_COLORS)
+        try:
+            img.info["dpi"] = (HAT_TEMPLATE["dpi"], HAT_TEMPLATE["dpi"])
+        except Exception:
+            pass
 
         if return_prompt:
             return img, prompt

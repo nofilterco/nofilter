@@ -22,7 +22,9 @@ def pick_phrase(niche: str = "") -> str:
 
     tier = (os.getenv("PHRASE_TIER") or "safe").strip().lower()
     phrases = get_phrases(tier)
-    phrase = random.choice(phrases) if phrases else "NO FILTER"
+    # Keep phrases embroidery-safe and short by default
+    short_phrases = [p for p in phrases if len((p or "").strip()) <= 20 and len((p or "").split()) <= 3]
+    phrase = random.choice(short_phrases or phrases) if (short_phrases or phrases) else "NO FILTER"
     # final safety gate
     risk = detect_risk(phrase)
     if risk:
