@@ -218,6 +218,16 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "plate_dependency",
         "commercial_style_reason",
         "product_rules",
+        "design_family",
+        "slogan_family",
+        "font_pairing",
+        "palette_family",
+        "composition_template",
+        "accent_icon_family",
+        "merch_style",
+        "phrase_category",
+        "merch_taste_score",
+        "reroll_reason",
     ):
         if extra not in fieldnames:
             fieldnames.append(extra)
@@ -330,6 +340,16 @@ def _brief_context_from_row(r: dict) -> dict:
         "icon_quality_score": r.get("icon_quality_score", "") or "",
         "plate_dependency": r.get("plate_dependency", "") or "",
         "commercial_style_reason": r.get("commercial_style_reason", "") or "",
+        "design_family": r.get("design_family", "") or "",
+        "slogan_family": r.get("slogan_family", "") or "",
+        "font_pairing": r.get("font_pairing", "") or "",
+        "palette_family": r.get("palette_family", "") or "",
+        "composition_template": r.get("composition_template", "") or "",
+        "accent_icon_family": r.get("accent_icon_family", "") or "",
+        "merch_style": r.get("merch_style", "") or "",
+        "phrase_category": r.get("phrase_category", "") or "",
+        "merch_taste_score": r.get("merch_taste_score", "") or "",
+        "reroll_reason": r.get("reroll_reason", "") or "",
         # style is handled separately by design_factory via `style=` arg and/or brief.style
     }
 
@@ -352,7 +372,7 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
         except Exception:
             pass
 
-    balanced_modes = ["icon_only", "text_only", "icon_plus_text", "short_quote"]
+    balanced_modes = ["phrase_hat", "phrase_hat", "phrase_hat", "phrase_hat", "word_hat", "icon_phrase_hat", "icon_only"]
     for i in range(1, count + 1):
         new_id = str(max_id + i)
 
@@ -363,7 +383,7 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
             brief.design_mode = forced_mode
             brief.include_text = forced_mode != "icon_only"
             if brief.include_text and not getattr(brief, "phrase", ""):
-                brief.phrase = pick_phrase("nostalgia")
+                brief.phrase = pick_phrase("nostalgia", category_override=getattr(brief, "phrase_category", "") or None)
 
         # Use V4’s weighted style (do NOT randomize here) – but keep fallback
         style = getattr(brief, "style", "") or random.choice(STYLE_CHOICES)
@@ -425,6 +445,16 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "icon_quality_score": getattr(brief, "icon_quality_score", ""),
                 "plate_dependency": getattr(brief, "plate_dependency", "low"),
                 "commercial_style_reason": getattr(brief, "commercial_style_reason", ""),
+                "design_family": getattr(brief, "design_family", "text_first"),
+                "slogan_family": getattr(brief, "slogan_family", ""),
+                "font_pairing": getattr(brief, "font_pairing", ""),
+                "palette_family": getattr(brief, "palette_family", ""),
+                "composition_template": getattr(brief, "composition_template", ""),
+                "accent_icon_family": getattr(brief, "accent_icon_family", "none"),
+                "merch_style": getattr(brief, "merch_style", ""),
+                "phrase_category": getattr(brief, "phrase_category", ""),
+                "merch_taste_score": getattr(brief, "merch_taste_score", ""),
+                "reroll_reason": getattr(brief, "reroll_reason", ""),
                 "product_rules": "hat_front:1200x675@300dpi|safe:3.5x2.0in|max_colors:6",
                 "style": style,
                 "include_text": "YES" if getattr(brief, "include_text", include_text) else "NO",
@@ -648,6 +678,16 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
         r["safe_area_fill_pct"] = str(img.info.get("safe_area_fill_pct", ""))
         r["motif_bbox"] = str((q_json or {}).get("motif_bbox", img.info.get("motif_bbox", "")))
         r["vector_mode_used"] = str(img.info.get("vector_mode_used", ""))
+        r["design_family"] = str(img.info.get("design_family", r.get("design_family", "")))
+        r["slogan_family"] = str(img.info.get("slogan_family", r.get("slogan_family", "")))
+        r["font_pairing"] = str(img.info.get("font_pairing", r.get("font_pairing", "")))
+        r["palette_family"] = str(img.info.get("palette_family", r.get("palette_family", "")))
+        r["composition_template"] = str(img.info.get("composition_template", r.get("composition_template", "")))
+        r["accent_icon_family"] = str(img.info.get("accent_icon_family", r.get("accent_icon_family", "")))
+        r["merch_style"] = str(img.info.get("merch_style", r.get("merch_style", "")))
+        r["phrase_category"] = str(img.info.get("phrase_category", r.get("phrase_category", "")))
+        r["merch_taste_score"] = str(img.info.get("merch_taste_score", r.get("merch_taste_score", "")))
+        r["reroll_reason"] = str(img.info.get("reroll_reason", r.get("reroll_reason", "")))
 
         if not ok:
             r["status"] = "HOLD_QUALITY"
