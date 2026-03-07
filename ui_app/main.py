@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
+import subprocess
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form
@@ -171,6 +172,20 @@ class QueueStore:
 store = QueueStore(QUEUE_PATH)
 
 
+def get_version() -> str:
+    try:
+        return Path("VERSION").read_text(encoding="utf-8").strip()
+    except Exception:
+        return "dev"
+
+
+def get_git_commit() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).decode().strip()
+    except Exception:
+        return "no-git"
+
+
 def _default_state() -> dict[str, Any]:
     return {
         "action": "idle",
@@ -273,192 +288,10 @@ def on_startup() -> None:
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard() -> str:
-    return """<!doctype html>
-<html><head><meta charset='utf-8'><title>NoFilter UI</title>
-<style>
-body{font-family:Inter,system-ui,-apple-system,sans-serif;max-width:1280px;margin:20px auto;padding:0 12px;color:#111}
-h1,h2,h3{margin:0 0 10px 0}
-.grid{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px;align-items:start}
-.card{border:1px solid #ddd;border-radius:10px;padding:12px;background:#fff}
-.actions{display:flex;flex-wrap:wrap;gap:8px}
-button{padding:8px 12px;border-radius:8px;border:1px solid #bbb;background:#f7f7f7;cursor:pointer}
-button.primary{background:#111;color:#fff;border-color:#111}
-input,select{padding:7px;border:1px solid #bbb;border-radius:6px}
-.small{font-size:12px;color:#555}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eee;font-size:12px;margin-right:6px}
-.badge.ok{background:#e4f9e4;color:#136d13}
-.badge.warn{background:#fff4d6;color:#7a5a00}
-.table-wrap{max-height:420px;overflow:auto;border:1px solid #ddd;border-radius:8px}
-.run-indicator{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:999px;background:#eef}
-.dot{width:10px;height:10px;border-radius:50%;background:#999}
-.dot.running{background:#0a7;box-shadow:0 0 0 0 rgba(16,185,129,.7);animation:pulse 1s infinite}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.7)}70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th,td{padding:6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
-#drops{max-height:220px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px}
-.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
-.gallery a{font-size:12px;word-break:break-all}
-</style>
-</head><body>
-<h1>NoFilter Local Control Panel</h1>
-<div class='small'>Pipeline: Seed → Generate → Verify → Publish Once / Run All</div><div id='run_badge' class='run-indicator'><span id='run_dot' class='dot'></span><span id='run_text'>Idle</span></div>
-<br>
-<div class='grid'>
-  <div class='card'>
-    <h3>Main actions</h3>
-    <div style='display:grid;gap:8px;margin-bottom:10px'>
-      <label>Seed count <input id='seed_count' type='number' value='5' min='1'></label>
-      <label>Generate count <input id='gen_count' type='number' value='3' min='1'></label>
-      <input id='custom_drop' placeholder='Optional fallback drop'>
-      <input id='drops_csv' placeholder='Selected drops auto-filled'>
-    </div>
-    <div class='actions'>
-      <button class='primary' onclick='doAction("seed")'>Seed</button>
-      <button class='primary' onclick='doAction("generate")'>Generate</button>
-      <button onclick='doAction("verify")'>Verify</button>
-      <button onclick='doAction("publish")'>Publish Once</button>
-      <button onclick='doAction("run_all")'>Run All</button>
-      <button onclick='doAction("stop")'>Stop Current Run</button>
-      <button onclick='doAction("cancel_pending")'>Cancel All Pending Tasks</button>
-      <button onclick='confirmAndRun("clear_processed")'>Clear Generated/Processed</button>
-      <button onclick='confirmAndRun("clear_queue")'>Clear Queue</button>
-    </div>
-    <p class='small'>Clear Queue removes all rows but keeps queue.csv headers intact.</p>
-    <h3>Last action result</h3>
-    <pre id='result' class='small'></pre>
-    <h3>Recent activity</h3>
-    <div id='history' class='small' style='max-height:200px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:8px'></div>
-  </div>
-
-  <div class='card'>
-    <h3>First-run readiness</h3>
-    <div id='wizard'></div>
-    <h3 style='margin-top:14px'>Live status</h3>
-    <div id='counts' class='small'></div>
-    <pre id='status' class='small'></pre>
-  </div>
-
-  <div class='card'>
-    <h3>Drops selection</h3>
-    <input id='search' placeholder='Search drops' oninput='renderDrops()'>
-    <div class='actions' style='margin-top:8px'>
-      <button onclick='allDrops(true)'>Select all</button>
-      <button onclick='allDrops(false)'>Clear all</button>
-    </div>
-    <div id='drops'></div>
-  </div>
-</div>
-
-<h2 style='margin-top:16px'>Queue viewer</h2>
-<div class='table-wrap'><table id='queue_table'></table></div>
-
-<h2 style='margin-top:16px'>Gallery viewer</h2>
-<div id='gallery' class='gallery'></div>
-
-<script>
-let drops=[]; let selected=new Set();
-let queueRows=[];
-
-async function postForm(url, fields={}) {
-  const body = new URLSearchParams(fields);
-  const res = await fetch(url, {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body});
-  return res.json();
-}
-
-function selectedDropsCSV(){ return [...selected].join(','); }
-
-async function doAction(name){
-  try{
-    let payload = {};
-    if(name==='seed') payload = {count:document.getElementById('seed_count').value, drops_csv:selectedDropsCSV(), custom_drop:document.getElementById('custom_drop').value};
-    if(name==='generate') payload = {count:document.getElementById('gen_count').value};
-    const data = await postForm('/actions/'+name, payload);
-    document.getElementById('result').textContent = JSON.stringify(data, null, 2);
-  }catch(err){
-    document.getElementById('result').textContent = 'Action failed: '+err;
-  }
-  await load();
-}
-
-async function confirmAndRun(name){
-  const ok = confirm(name==='clear_queue' ? 'Clear all queue rows? This cannot be undone.' : 'Remove generated/processed rows and keep NEW rows?');
-  if(!ok) return;
-  await doAction(name);
-}
-
-function renderWizard(w){
-  const g = w.ready_generate ? "<span class='badge ok'>Generate ready</span>" : "<span class='badge warn'>Generate blocked</span>";
-  const p = w.ready_publish ? "<span class='badge ok'>Publish ready</span>" : "<span class='badge warn'>Publish blocked</span>";
-  const mg = (w.missing_for_generate||[]).join(', ') || 'None';
-  const mp = (w.missing_for_publish||[]).join(', ') || 'None';
-  document.getElementById('wizard').innerHTML = `${g}${p}<div class='small'>Queue rows: ${w.queue_rows} | Drops: ${w.drop_count}</div><div class='small'><b>Missing for generate:</b> ${mg}</div><div class='small'><b>Missing for publish:</b> ${mp}</div>`;
-}
-
-function renderQueue(rows){
-  queueRows = rows || [];
-  const el = document.getElementById('queue_table');
-  if(queueRows.length===0){ el.innerHTML = '<tr><td class="small">queue.csv has headers but no rows.</td></tr>'; return; }
-  const cols = ['id','status','pipeline_stage','drop','motif','concept_risk','concept_reasons','quality_status','quality_reason','error_stage','error_message','local_path','published_at'];
-  const head = '<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>';
-  const body = queueRows.slice(0,150).map(r=>'<tr>'+cols.map(c=>`<td>${(r[c]||'').toString().slice(0,140)}</td>`).join('')+'</tr>').join('');
-  el.innerHTML = head + body;
-}
-
-function renderDrops(){
-  const s=(document.getElementById('search').value||'').toLowerCase();
-  document.getElementById('drops').innerHTML = drops.filter(d=>d.toLowerCase().includes(s)).map(d=>{
-    const ck=selected.has(d)?'checked':''; const v=encodeURIComponent(d);
-    return `<label><input type='checkbox' data-drop='${v}' ${ck} onchange='toggleDrop(this)'> ${d}</label><br>`;
-  }).join('');
-  document.getElementById('drops_csv').value = selectedDropsCSV();
-}
-
-function toggleDrop(el){
-  const d=decodeURIComponent(el.dataset.drop||'');
-  if(el.checked) selected.add(d); else selected.delete(d);
-  document.getElementById('drops_csv').value = selectedDropsCSV();
-}
-
-function allDrops(on){ selected=new Set(on?drops:[]); renderDrops(); }
-
-function renderHistory(items){
-  const el=document.getElementById('history');
-  if(!items||items.length===0){el.innerHTML='No activity yet.';return;}
-  el.innerHTML=[...items].reverse().map(h=>`<div><b>${h.timestamp||''}</b> [${h.action||''}] row=${h.row_id||'-'} stage=${h.stage||'-'} outcome=${h.outcome||''}<br>${h.message||''}</div><hr>`).join('');
-}
-
-function renderRunStatus(s){
- const running=!!s.is_running;
- document.getElementById('run_dot').className=running?'dot running':'dot';
- document.getElementById('run_text').textContent=running?`Working: ${s.current_action||s.action} ${s.current_row?`(row ${s.current_row})`:''}`:'Idle';
-}
-
-async function load(){
-  const [q,s,w,d,g,sum] = await Promise.all([
-    fetch('/api/queue').then(r=>r.json()),
-    fetch('/api/status').then(r=>r.json()),
-    fetch('/api/wizard').then(r=>r.json()),
-    fetch('/api/drops').then(r=>r.json()),
-    fetch('/api/gallery').then(r=>r.json()),
-    fetch('/api/summary').then(r=>r.json()),
-  ]);
-  drops = d || [];
-  if(selected.size===0) drops.forEach(x=>selected.add(x));
-  renderDrops();
-  renderQueue(q);
-  renderWizard(w);
-  document.getElementById('status').textContent = JSON.stringify(s, null, 2);
-  document.getElementById('counts').textContent = `Status counts: NEW=${sum.NEW||0} GENERATED=${sum.GENERATED||0} HOLD_QUALITY=${sum.HOLD_QUALITY||0} ERROR=${sum.ERROR||0} PUBLISHED=${sum.PUBLISHED||0}`;
-  renderHistory(s.history||[]);
-  renderRunStatus(s);
-  document.getElementById('gallery').innerHTML = (g||[]).map(x=>`<div><a href='/${x}' target='_blank'>${x}</a></div>`).join('');
-}
-
-load();
-setInterval(load, 4000);
-</script>
-</body></html>"""
+def dashboard() -> HTMLResponse:
+    template = (ROOT / "ui_app" / "templates" / "index.html").read_text(encoding="utf-8")
+    html = template.replace("{{ version }}", get_version()).replace("{{ commit }}", get_git_commit())
+    return HTMLResponse(html)
 
 
 @app.get("/api/drops")
