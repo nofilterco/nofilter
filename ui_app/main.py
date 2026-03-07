@@ -65,6 +65,14 @@ DEFAULT_QUEUE_HEADERS = [
     "quality_status",
     "quality_reason",
     "quality_json",
+    "pipeline_stage",
+    "concept_risk",
+    "concept_reasons",
+    "error_stage",
+    "error_message",
+    "debug_trace",
+    "started_at",
+    "finished_at",
     "drop_seq",
     "local_path",
     "generated_at",
@@ -77,6 +85,8 @@ DEFAULT_QUEUE_HEADERS = [
 ]
 
 PROCESSED_STATUSES = {
+    "ERROR",
+    "CANCELLED",
     "GENERATED",
     "APPROVED",
     "PUBLISHED",
@@ -149,21 +159,67 @@ class QueueStore:
 store = QueueStore(QUEUE_PATH)
 
 
-def set_state(action: str, detail: str = "") -> None:
-    payload = {
-        "action": action,
-        "detail": detail,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+def _default_state() -> dict[str, Any]:
+    return {
+        "action": "idle",
+        "detail": "",
+        "updated_at": "",
+        "is_running": False,
+        "current_action": "",
+        "current_row": "",
+        "stop_requested": False,
+        "cancel_pending": False,
+        "history": [],
     }
-    with _state_lock:
-        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def get_state() -> dict[str, Any]:
     if not STATE_PATH.exists():
-        return {"action": "idle", "detail": "", "updated_at": ""}
-    return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return _default_state()
+    data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    base = _default_state()
+    base.update(data)
+    return base
+
+
+def add_history(action: str, outcome: str, message: str = "", row_id: str = "", stage: str = "") -> None:
+    with _state_lock:
+        payload = get_state()
+        history = payload.get("history") or []
+        history.append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "action": action,
+                "row_id": row_id,
+                "stage": stage,
+                "outcome": outcome,
+                "message": message,
+            }
+        )
+        payload["history"] = history[-50:]
+        payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def set_state(action: str, detail: str = "", *, running: bool = False, current_action: str = "", current_row: str = "") -> None:
+    with _state_lock:
+        payload = get_state()
+        payload.update(
+            {
+                "action": action,
+                "detail": detail,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "is_running": running,
+                "current_action": current_action,
+                "current_row": current_row,
+            }
+        )
+        if running:
+            payload["stop_requested"] = False
+            payload["cancel_pending"] = False
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def env_check() -> dict[str, Any]:
@@ -211,7 +267,7 @@ def dashboard() -> str:
 <style>
 body{font-family:Inter,system-ui,-apple-system,sans-serif;max-width:1280px;margin:20px auto;padding:0 12px;color:#111}
 h1,h2,h3{margin:0 0 10px 0}
-.grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:14px;align-items:start}
+.grid{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px;align-items:start}
 .card{border:1px solid #ddd;border-radius:10px;padding:12px;background:#fff}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
 button{padding:8px 12px;border-radius:8px;border:1px solid #bbb;background:#f7f7f7;cursor:pointer}
@@ -221,7 +277,11 @@ input,select{padding:7px;border:1px solid #bbb;border-radius:6px}
 .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eee;font-size:12px;margin-right:6px}
 .badge.ok{background:#e4f9e4;color:#136d13}
 .badge.warn{background:#fff4d6;color:#7a5a00}
-.table-wrap{max-height:360px;overflow:auto;border:1px solid #ddd;border-radius:8px}
+.table-wrap{max-height:420px;overflow:auto;border:1px solid #ddd;border-radius:8px}
+.run-indicator{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border-radius:999px;background:#eef}
+.dot{width:10px;height:10px;border-radius:50%;background:#999}
+.dot.running{background:#0a7;box-shadow:0 0 0 0 rgba(16,185,129,.7);animation:pulse 1s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.7)}70%{box-shadow:0 0 0 8px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}
 table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{padding:6px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}
 #drops{max-height:220px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px}
@@ -230,7 +290,7 @@ th,td{padding:6px;border-bottom:1px solid #eee;text-align:left;vertical-align:to
 </style>
 </head><body>
 <h1>NoFilter Local Control Panel</h1>
-<div class='small'>Pipeline: Seed → Generate → Verify → Publish Once / Run All</div>
+<div class='small'>Pipeline: Seed → Generate → Verify → Publish Once / Run All</div><div id='run_badge' class='run-indicator'><span id='run_dot' class='dot'></span><span id='run_text'>Idle</span></div>
 <br>
 <div class='grid'>
   <div class='card'>
@@ -247,18 +307,23 @@ th,td{padding:6px;border-bottom:1px solid #eee;text-align:left;vertical-align:to
       <button onclick='doAction("verify")'>Verify</button>
       <button onclick='doAction("publish")'>Publish Once</button>
       <button onclick='doAction("run_all")'>Run All</button>
+      <button onclick='doAction("stop")'>Stop Current Run</button>
+      <button onclick='doAction("cancel_pending")'>Cancel All Pending Tasks</button>
       <button onclick='confirmAndRun("clear_processed")'>Clear Generated/Processed</button>
       <button onclick='confirmAndRun("clear_queue")'>Clear Queue</button>
     </div>
     <p class='small'>Clear Queue removes all rows but keeps queue.csv headers intact.</p>
     <h3>Last action result</h3>
     <pre id='result' class='small'></pre>
+    <h3>Recent activity</h3>
+    <div id='history' class='small' style='max-height:200px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:8px'></div>
   </div>
 
   <div class='card'>
     <h3>First-run readiness</h3>
     <div id='wizard'></div>
     <h3 style='margin-top:14px'>Live status</h3>
+    <div id='counts' class='small'></div>
     <pre id='status' class='small'></pre>
   </div>
 
@@ -322,7 +387,7 @@ function renderQueue(rows){
   queueRows = rows || [];
   const el = document.getElementById('queue_table');
   if(queueRows.length===0){ el.innerHTML = '<tr><td class="small">queue.csv has headers but no rows.</td></tr>'; return; }
-  const cols = ['id','status','drop','motif','local_path','r2_url','printify_product_id','published_at'];
+  const cols = ['id','status','pipeline_stage','drop','motif','concept_risk','concept_reasons','quality_status','quality_reason','error_stage','error_message','local_path','published_at'];
   const head = '<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>';
   const body = queueRows.slice(0,150).map(r=>'<tr>'+cols.map(c=>`<td>${(r[c]||'').toString().slice(0,140)}</td>`).join('')+'</tr>').join('');
   el.innerHTML = head + body;
@@ -345,13 +410,26 @@ function toggleDrop(el){
 
 function allDrops(on){ selected=new Set(on?drops:[]); renderDrops(); }
 
+function renderHistory(items){
+  const el=document.getElementById('history');
+  if(!items||items.length===0){el.innerHTML='No activity yet.';return;}
+  el.innerHTML=[...items].reverse().map(h=>`<div><b>${h.timestamp||''}</b> [${h.action||''}] row=${h.row_id||'-'} stage=${h.stage||'-'} outcome=${h.outcome||''}<br>${h.message||''}</div><hr>`).join('');
+}
+
+function renderRunStatus(s){
+ const running=!!s.is_running;
+ document.getElementById('run_dot').className=running?'dot running':'dot';
+ document.getElementById('run_text').textContent=running?`Working: ${s.current_action||s.action} ${s.current_row?`(row ${s.current_row})`:''}`:'Idle';
+}
+
 async function load(){
-  const [q,s,w,d,g] = await Promise.all([
+  const [q,s,w,d,g,sum] = await Promise.all([
     fetch('/api/queue').then(r=>r.json()),
     fetch('/api/status').then(r=>r.json()),
     fetch('/api/wizard').then(r=>r.json()),
     fetch('/api/drops').then(r=>r.json()),
     fetch('/api/gallery').then(r=>r.json()),
+    fetch('/api/summary').then(r=>r.json()),
   ]);
   drops = d || [];
   if(selected.size===0) drops.forEach(x=>selected.add(x));
@@ -359,6 +437,9 @@ async function load(){
   renderQueue(q);
   renderWizard(w);
   document.getElementById('status').textContent = JSON.stringify(s, null, 2);
+  document.getElementById('counts').textContent = `Status counts: NEW=${sum.NEW||0} GENERATED=${sum.GENERATED||0} HOLD_QUALITY=${sum.HOLD_QUALITY||0} ERROR=${sum.ERROR||0} PUBLISHED=${sum.PUBLISHED||0}`;
+  renderHistory(s.history||[]);
+  renderRunStatus(s);
   document.getElementById('gallery').innerHTML = (g||[]).map(x=>`<div><a href='/${x}' target='_blank'>${x}</a></div>`).join('');
 }
 
@@ -394,6 +475,15 @@ def api_status() -> dict[str, Any]:
     return get_state()
 
 
+@app.get("/api/summary")
+def api_summary() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for r in store.load():
+        key = (r.get("status", "") or "").strip().upper() or "UNKNOWN"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 @app.get("/api/wizard")
 def api_wizard() -> dict[str, Any]:
     return env_check()
@@ -401,7 +491,7 @@ def api_wizard() -> dict[str, Any]:
 
 @app.post("/actions/seed")
 def action_seed(count: int = Form(...), drops_csv: str = Form(""), custom_drop: str = Form("")) -> JSONResponse:
-    set_state("seeding", f"count={count}")
+    set_state("seeding", f"count={count}", running=True, current_action="seed")
     store.ensure_file()
     rows = load_queue()
     selected = [d.strip() for d in drops_csv.split(",") if d.strip()]
@@ -421,58 +511,97 @@ def action_seed(count: int = Form(...), drops_csv: str = Form(""), custom_drop: 
         remaining -= 1
 
     save_queue(rows)
-    set_state("idle", "seed complete")
+    set_state("idle", "seed complete", running=False)
+    add_history("seed", "ok", f"seeded={count}", stage="SEEDED")
     return JSONResponse({"ok": True, "seeded": count, "drops": selected, "queue_rows": len(rows)})
 
 
 @app.post("/actions/generate")
 def action_generate(count: int = Form(...)) -> JSONResponse:
-    set_state("generating", f"count={count}")
+    set_state("generating", f"count={count}", running=True, current_action="generate")
     generated, failed = generate_batch(count)
-    set_state("idle", f"generated={generated},failed={failed}")
+    set_state("idle", f"generated={generated},failed={failed}", running=False)
+    add_history("generate", "ok", f"generated={generated},failed={failed}", stage="GENERATE_BATCH")
     return JSONResponse({"ok": True, "generated": generated, "failed": failed})
 
 
 @app.post("/actions/verify")
 def action_verify() -> JSONResponse:
-    set_state("verifying")
+    set_state("verifying", running=True, current_action="verify")
     checked, approved, rejected = verify_generated()
-    set_state("idle", f"checked={checked},approved={approved},rejected={rejected}")
+    set_state("idle", f"checked={checked},approved={approved},rejected={rejected}", running=False)
+    add_history("verify", "ok", f"checked={checked},approved={approved},rejected={rejected}", stage="VERIFY")
     return JSONResponse({"ok": True, "checked": checked, "approved": approved, "rejected": rejected})
 
 
 @app.post("/actions/publish")
 def action_publish() -> JSONResponse:
-    set_state("publishing", "once")
+    set_state("publishing", "once", running=True, current_action="publish")
     did = process_one(auto_seed=False)
-    set_state("idle", f"published={int(bool(did))}")
+    set_state("idle", f"published={int(bool(did))}", running=False)
+    add_history("publish", "ok" if did else "noop", f"published={int(bool(did))}", stage="PUBLISH")
     return JSONResponse({"ok": True, "published": int(bool(did))})
 
 
 @app.post("/actions/run_all")
 def action_run_all() -> JSONResponse:
-    set_state("publishing", "run_all")
+    set_state("publishing", "run_all", running=True, current_action="run_all")
     published = 0
     while True:
+        if get_state().get("stop_requested"):
+            break
         did = process_one(auto_seed=False)
         if not did:
             break
         published += 1
-    set_state("idle", f"published={published}")
+    set_state("idle", f"published={published}", running=False)
+    add_history("run_all", "ok", f"published={published}", stage="PUBLISH")
     return JSONResponse({"ok": True, "published": published})
 
 
 @app.post("/actions/clear_queue")
 def action_clear_queue() -> JSONResponse:
-    set_state("queue", "clearing all rows")
+    set_state("queue", "clearing all rows", running=True, current_action="clear_queue")
     removed = store.clear_all()
-    set_state("idle", f"queue_cleared={removed}")
+    set_state("idle", f"queue_cleared={removed}", running=False)
+    add_history("clear_queue", "ok", f"removed={removed}", stage="QUEUE")
     return JSONResponse({"ok": True, "removed": removed, "message": "Queue cleared; headers preserved."})
 
 
 @app.post("/actions/clear_processed")
 def action_clear_processed() -> JSONResponse:
-    set_state("queue", "clearing processed rows")
+    set_state("queue", "clearing processed rows", running=True, current_action="clear_processed")
     removed, kept = store.clear_processed()
-    set_state("idle", f"processed_removed={removed},kept={kept}")
+    set_state("idle", f"processed_removed={removed},kept={kept}", running=False)
+    add_history("clear_processed", "ok", f"removed={removed},kept={kept}", stage="QUEUE")
     return JSONResponse({"ok": True, "removed": removed, "remaining": kept})
+
+
+@app.post("/actions/stop")
+def action_stop() -> JSONResponse:
+    payload = get_state()
+    payload["stop_requested"] = True
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    add_history("stop", "requested", "stop current run after current item")
+    return JSONResponse({"ok": True, "stop_requested": True})
+
+
+@app.post("/actions/cancel_pending")
+def action_cancel_pending() -> JSONResponse:
+    payload = get_state()
+    payload["cancel_pending"] = True
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    rows = store.load()
+    cancelled = 0
+    for r in rows:
+        if (r.get("status", "") or "").strip().upper() == "NEW":
+            r["status"] = "CANCELLED"
+            r["pipeline_stage"] = "CANCELLED"
+            r["finished_at"] = datetime.now(timezone.utc).isoformat()
+            cancelled += 1
+    save_queue(rows)
+    add_history("cancel_pending", "ok", f"cancelled={cancelled}")
+    return JSONResponse({"ok": True, "cancelled": cancelled})
