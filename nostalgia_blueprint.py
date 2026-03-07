@@ -541,32 +541,20 @@ def get_phrases(tier: str = "") -> List[str]:
 
 
 DESIGN_MODES = [
+    "phrase_hat",
+    "word_hat",
+    "icon_phrase_hat",
     "icon_only",
-    "text_only",
-    "icon_plus_text",
-    "monogram",
-    "short_quote",
-    "meme_phrase",
-    "nostalgia_wordmark",
 ]
 
 TEXT_MODES = [
-    "single_word",
-    "single_line",
-    "stacked_two_line",
-    "arched_with_icon",
-    "block_monogram",
-    "icon_above_word",
-    "bold_single_line_wordmark",
-    "stacked_slogan",
-    "arched_line_with_center_icon",
-    "icon_over_micro_phrase",
-    "utility_small_caps",
-    "faux_department_mark",
-    "chunky_varsity",
-    "condensed_tech_status",
-    "monogram_with_subtitle",
-    "direct_slogan_lockup",
+    "bold_wordmark",
+    "stacked_phrase",
+    "arched_phrase",
+    "retro_tech_mono",
+    "varsity_block",
+    "clean_sans_caps",
+    "script_accent",
 ]
 
 ART_DIRECTIONS = [
@@ -583,25 +571,21 @@ ART_DIRECTIONS = [
 ]
 
 LAYOUT_ARCHETYPES = [
-    "centered_icon",
-    "centered_wordmark",
-    "icon_with_word_below",
-    "wordmark_with_icon_accent",
-    "tasteful_emblem_frame",
-    "monogram_lockup",
+    "single_line_center",
+    "two_line_stack",
+    "arched_top",
+    "icon_above_text",
+    "small_icon_left",
 ]
 
 TYPE_TREATMENTS = [
-    "bold_single_line_wordmark",
-    "stacked_2line_slogan",
-    "arched_topline",
-    "icon_over_small_phrase",
-    "understated_small_caps_utility",
-    "faux_department_service_mark",
-    "chunky_varsity_block",
-    "condensed_status_wordmark",
-    "centered_monogram_subtitle",
-    "direct_slogan_lockup",
+    "bold_wordmark",
+    "stacked_phrase",
+    "arched_phrase",
+    "retro_tech_mono",
+    "varsity_block",
+    "clean_sans_caps",
+    "script_accent",
 ]
 
 ICON_TREATMENTS = [
@@ -1064,52 +1048,43 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
     visual_energy = random.choice(VISUAL_ENERGY_LEVELS)
 
     design_mode = _pick_weighted([
-        ("icon_only", 23),
-        ("text_only", 16),
-        ("icon_plus_text", 26),
-        ("monogram", 10),
-        ("short_quote", 9),
-        ("meme_phrase", 9),
-        ("nostalgia_wordmark", 7),
+        ("phrase_hat", 70),
+        ("word_hat", 20),
+        ("icon_phrase_hat", 10),
+        ("icon_only", 1),
     ])
-    include_text = include_text or design_mode in ("text_only", "icon_plus_text", "short_quote", "meme_phrase", "nostalgia_wordmark")
+    include_text = include_text or design_mode in ("phrase_hat", "word_hat", "icon_phrase_hat")
     slogan_type = random.choice(list(SLOGAN_BANK.keys()))
     humor_mode = random.choice(["deadpan", "understated", "club_irony", "low_energy", "status_humor"])
     nostalgia_axis = random.choice(NOSTALGIA_AXES)
     text_mode_by_design = {
         "icon_only": "",
-        "text_only": random.choice(["bold_single_line_wordmark", "stacked_slogan", "chunky_varsity", "condensed_tech_status"]),
-        "icon_plus_text": random.choice(["icon_above_word", "arched_line_with_center_icon", "faux_department_mark", "direct_slogan_lockup"]),
-        "monogram": "monogram_with_subtitle",
-        "short_quote": random.choice(["stacked_slogan", "condensed_tech_status"]),
-        "meme_phrase": random.choice(["direct_slogan_lockup", "stacked_slogan"]),
-        "nostalgia_wordmark": random.choice(["bold_single_line_wordmark", "utility_small_caps"]),
+        "phrase_hat": random.choice(["stacked_phrase", "arched_phrase", "clean_sans_caps", "retro_tech_mono"]),
+        "word_hat": random.choice(["bold_wordmark", "varsity_block", "clean_sans_caps"]),
+        "icon_phrase_hat": random.choice(["stacked_phrase", "clean_sans_caps", "retro_tech_mono"]),
     }
-    text_mode = text_mode_by_design.get(design_mode, "single_line")
+    text_mode = text_mode_by_design.get(design_mode, "clean_sans_caps")
 
     layout_for_mode = {
-        "icon_only": ["centered_icon", "tasteful_emblem_frame"],
-        "text_only": ["centered_wordmark"],
-        "icon_plus_text": ["icon_with_word_below", "wordmark_with_icon_accent"],
-        "monogram": ["monogram_lockup"],
-        "short_quote": ["centered_wordmark", "wordmark_with_icon_accent"],
-        "meme_phrase": ["centered_wordmark", "icon_with_word_below"],
-        "nostalgia_wordmark": ["centered_wordmark", "wordmark_with_icon_accent"],
+        "icon_only": ["icon_above_text"],
+        "phrase_hat": ["single_line_center", "two_line_stack", "arched_top"],
+        "word_hat": ["single_line_center", "arched_top"],
+        "icon_phrase_hat": ["icon_above_text", "small_icon_left"],
     }
     layout_archetype = random.choice(layout_for_mode.get(design_mode, LAYOUT_ARCHETYPES))
-    type_treatment = text_mode if include_text else random.choice(["understated_small_caps_utility", "condensed_status_wordmark"])
+    type_treatment = text_mode if include_text else "clean_sans_caps"
     icon_treatment = random.choice(ICON_TREATMENTS)
-    frame_treatment = random.choice(["none", "none", "none", "underline", "ring", "arc", "border"])
+    frame_treatment = "none"
 
     if include_text:
-        phrase = choose_slogan(humor_mode=humor_mode, slogan_type=slogan_type, max_chars=22 if design_mode == "short_quote" else 20)
+        phrase = choose_slogan(humor_mode=humor_mode, slogan_type=slogan_type, max_chars=24)
     else:
         phrase = ""
 
     motif_choices = motifs
-    if design_mode in ("icon_only", "icon_plus_text"):
+    if design_mode in ("icon_only", "icon_phrase_hat"):
         motif_choices = motifs + [f"{random.choice(ICON_LIBRARY)} icon with thick silhouette"]
-    if design_mode in ("text_only", "short_quote", "meme_phrase", "nostalgia_wordmark"):
+    if design_mode in ("phrase_hat", "word_hat"):
         motif_choices = ["clean embroidery wordmark lockup", "short phrase typography lockup", "bold stitch-safe lettering"] + motif_choices
 
     wearable_score = str(random.randint(7, 10))
@@ -1181,7 +1156,7 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         hierarchy_score=str(random.randint(7, 10)),
         visual_balance_score=str(random.randint(7, 10)),
         typography_quality_score=str(random.randint(7, 10)) if include_text else "",
-        icon_quality_score=str(random.randint(7, 10)) if design_mode != "text_only" else "",
+        icon_quality_score=str(random.randint(7, 10)) if design_mode in ("icon_phrase_hat", "icon_only") else "",
         plate_dependency="low",
         commercial_style_reason=commercial_style_reason,
     )
@@ -1403,22 +1378,13 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         text_part = "No text. Icon-only with a recognizable motif people would wear."
 
     layout_guidance = {
-        "single_line": "centered single-line wordmark",
-        "stacked_two_line": "stacked two-line phrase with clear separation",
-        "arched_with_icon": "arched top text with small centered icon",
-        "block_monogram": "bold block monogram letters",
-        "icon_above_word": "simple icon above short word",
-        "single_word": "single short wordmark",
-        "bold_single_line_wordmark": "bold single-line wordmark",
-        "stacked_slogan": "stacked 2-line slogan with deliberate hierarchy",
-        "arched_line_with_center_icon": "arched top line with centered icon",
-        "icon_over_micro_phrase": "icon over short phrase",
-        "utility_small_caps": "understated utility small-caps text",
-        "faux_department_mark": "faux department/service mark",
-        "chunky_varsity": "chunky varsity block text",
-        "condensed_tech_status": "condensed tech-status wordmark",
-        "monogram_with_subtitle": "centered monogram with subtitle",
-        "direct_slogan_lockup": "direct slogan lockup with balanced spacing",
+        "bold_wordmark": "bold centered wordmark",
+        "stacked_phrase": "stacked two-line phrase with balanced spacing",
+        "arched_phrase": "arched top phrase lockup",
+        "retro_tech_mono": "retro tech monospace style lettering",
+        "varsity_block": "varsity block lettering",
+        "clean_sans_caps": "clean sans all-caps",
+        "script_accent": "simple script accent phrase",
     }.get(brief.text_mode or "", "centered compact embroidery lockup")
 
     drop_name = brief.drop_title or brief.drop
@@ -1438,7 +1404,7 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         f"Artboard must be exactly {cw}x{ch}px at {product_rules['dpi']} DPI ({iw}in x {ih}in). "
         f"Design must be centered in the front panel safe area ({sw}in x {sh}in) with clear edge padding. "
         f"Collection: {drop_name}. {vibe_part}{tone_part}"
-        f"Design mode: {brief.design_mode or 'icon_only'}. "
+        f"Design mode: {brief.design_mode or 'phrase_hat'}. "
         f"Text mode: {brief.text_mode or 'none'}. Slogan type: {brief.slogan_type or 'none'}. Humor mode: {brief.humor_mode or 'understated'}. "
         f"Nostalgia axis: {brief.nostalgia_axis or '90s_mall'}. "
         f"Motif: {brief.motif}. Motif family: {brief.motif_family}. Frame: {brief.motif_frame}. "
@@ -1447,7 +1413,7 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         f"Color palette hint: {brief.palette_hint}. {emb_style}{emb_focus}"
         f"Layout archetype: {style}. {style_desc} "
         f"Art direction: {brief.art_direction or 'premium_icon_lockup'}. "
-        f"Composition archetype: {brief.layout_archetype or 'centered_icon'}. "
+        f"Composition archetype: {brief.layout_archetype or 'single_line_center'}. "
         f"Type treatment: {brief.type_treatment or layout_guidance}. Icon treatment: {brief.icon_treatment or 'clean_silhouette'}. "
         f"Frame treatment: {brief.frame_treatment or 'none'} (default transparent/no plate). Visual energy: {brief.visual_energy or 'balanced'}. "
         f"Commercial style reason: {brief.commercial_style_reason or 'boutique trucker cap, premium novelty look'}. "
