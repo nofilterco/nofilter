@@ -82,6 +82,18 @@ DEFAULT_QUEUE_HEADERS = [
     "r2_url",
     "mockup_r2_url",
     "printify_image_id",
+    "art_direction",
+    "layout_archetype",
+    "type_treatment",
+    "icon_treatment",
+    "frame_treatment",
+    "visual_energy",
+    "hierarchy_score",
+    "visual_balance_score",
+    "typography_quality_score",
+    "icon_quality_score",
+    "plate_dependency",
+    "commercial_style_reason",
 ]
 
 PROCESSED_STATUSES = {
