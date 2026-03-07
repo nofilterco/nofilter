@@ -80,6 +80,9 @@ def _env_true(name: str, default: str = "0") -> bool:
 # =========================
 @dataclass
 class EmbroideryConfig:
+    canvas_width_px: int = 1200
+    canvas_height_px: int = 675
+    canvas_dpi: int = 300
     embroidery_width_in: float = 4.0
     embroidery_height_in: float = 2.25
     safe_width_in: float = 3.5
@@ -92,7 +95,9 @@ class EmbroideryConfig:
     def __post_init__(self) -> None:
         if self.allowed_thread_palette is None:
             self.allowed_thread_palette = [
-                "black", "white", "navy", "charcoal", "red", "royal blue", "forest green", "khaki"
+                "#000000", "#96a1a8", "#ffffff", "#660000", "#cc3333",
+                "#cc3366", "#a67843", "#e25c27", "#ffcc00", "#01784e",
+                "#7ba35a", "#333366", "#005397", "#3399ff", "#6b5294",
             ]
 
 
@@ -111,6 +116,9 @@ def load_embroidery_config(path: str = "nofilter.yaml") -> EmbroideryConfig:
         return default
 
     return EmbroideryConfig(
+        canvas_width_px=int(emb.get("canvas_width_px", default.canvas_width_px)),
+        canvas_height_px=int(emb.get("canvas_height_px", default.canvas_height_px)),
+        canvas_dpi=int(emb.get("canvas_dpi", default.canvas_dpi)),
         embroidery_width_in=float(emb.get("embroidery_width_in", default.embroidery_width_in)),
         embroidery_height_in=float(emb.get("embroidery_height_in", default.embroidery_height_in)),
         safe_width_in=float(emb.get("safe_width_in", default.safe_width_in)),
@@ -124,6 +132,15 @@ def load_embroidery_config(path: str = "nofilter.yaml") -> EmbroideryConfig:
 
 EMBROIDERY_CONFIG = load_embroidery_config()
 MAX_THREAD_COLORS = EMBROIDERY_CONFIG.max_colors
+HAT_TEMPLATE = {
+    "width_px": EMBROIDERY_CONFIG.canvas_width_px,
+    "height_px": EMBROIDERY_CONFIG.canvas_height_px,
+    "dpi": EMBROIDERY_CONFIG.canvas_dpi,
+    "width_in": EMBROIDERY_CONFIG.embroidery_width_in,
+    "height_in": EMBROIDERY_CONFIG.embroidery_height_in,
+    "safe_width_in": EMBROIDERY_CONFIG.safe_width_in,
+    "safe_height_in": EMBROIDERY_CONFIG.safe_height_in,
+}
 
 
 # =========================
@@ -270,6 +287,36 @@ TEXT_PAIRING_CONTEXTS = [
     "inventory sticker",
     "school supply label",
 ]
+
+MOTIF_FAMILIES = [
+    "badge",
+    "patch",
+    "symbol",
+    "mascot-icon",
+    "framed-emblem",
+    "retro-label",
+    "monogram",
+    "center-icon-system",
+]
+
+MOTIF_FRAMES = [
+    "circular seal",
+    "rounded rectangle patch",
+    "shield emblem",
+    "ticket stub frame",
+    "capsule label",
+    "arched crest",
+]
+
+PRODUCT_RULES = {
+    "hat": {
+        "canvas_px": (HAT_TEMPLATE["width_px"], HAT_TEMPLATE["height_px"]),
+        "dpi": HAT_TEMPLATE["dpi"],
+        "size_in": (HAT_TEMPLATE["width_in"], HAT_TEMPLATE["height_in"]),
+        "safe_in": (HAT_TEMPLATE["safe_width_in"], HAT_TEMPLATE["safe_height_in"]),
+        "focus": "centered front panel",
+    }
+}
 
 
 # =========================
@@ -916,6 +963,13 @@ class DesignBrief:
     texture_cue: str = ""
     variation_modifier: str = ""
 
+    # Structured motif metadata for queue/debug
+    motif_family: str = ""
+    motif_frame: str = ""
+    motif_keywords: str = ""
+    center_weight: str = ""
+    silhouette_strength: str = ""
+
 
 def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> DesignBrief:
     """
@@ -962,6 +1016,20 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         era_situation=random.choice(ERA_SITUATIONS),
         texture_cue=random.choice(TEXTURE_CUES),
         variation_modifier=random.choice(VARIATION_MODIFIERS),
+        motif_family=random.choice(MOTIF_FAMILIES),
+        motif_frame=random.choice(MOTIF_FRAMES),
+        motif_keywords=", ".join(random.sample([
+            "bold silhouette",
+            "thick border",
+            "flat fill",
+            "embroidered patch",
+            "centered weight",
+            "retro insignia",
+            "limited drop",
+            "clean negative space",
+        ], 3)),
+        center_weight=random.choice(["strong", "strong", "medium"]),
+        silhouette_strength=random.choice(["iconic", "iconic", "solid"]),
     )
 
 
@@ -1059,72 +1127,88 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
         era_situation=(row.get("era_situation") or "").strip(),
         texture_cue=(row.get("texture_cue") or "").strip(),
         variation_modifier=(row.get("variation_modifier") or "").strip(),
+        motif_family=(row.get("motif_family") or "").strip(),
+        motif_frame=(row.get("motif_frame") or "").strip(),
+        motif_keywords=(row.get("motif_keywords") or "").strip(),
+        center_weight=(row.get("center_weight") or "").strip(),
+        silhouette_strength=(row.get("silhouette_strength") or "").strip(),
     )
+
+
+def evaluate_embroidery_concept(brief: DesignBrief, *, product_type: str = "hat") -> Tuple[bool, List[str]]:
+    reasons: List[str] = []
+    motif_text = " ".join([
+        brief.motif,
+        brief.motif_keywords,
+        brief.variation_modifier,
+        brief.texture_cue,
+        brief.style,
+    ]).lower()
+    if any(t in motif_text for t in ("gradient", "photo", "photoreal", "distressed", "grunge", "watercolor")):
+        reasons.append("concept_forbidden_render_style")
+    if any(t in motif_text for t in ("tiny text", "paragraph", "wallpaper", "landscape", "full scene")):
+        reasons.append("concept_not_hat_compact")
+    if brief.include_text and brief.phrase and len(brief.phrase) > 20:
+        reasons.append("text_too_long_for_embroidery")
+    if brief.center_weight and brief.center_weight.lower() not in ("strong", "medium"):
+        reasons.append("weak_center_weight")
+    if brief.silhouette_strength and brief.silhouette_strength.lower() not in ("iconic", "solid"):
+        reasons.append("weak_silhouette")
+    if product_type == "hat" and brief.motif_family == "monogram" and brief.include_text and len(brief.phrase.split()) > 2:
+        reasons.append("monogram_text_too_complex")
+    return (len(reasons) == 0, reasons)
 
 
 # =========================
 # Prompt builder (embroidery-tuned + V4 variety)
 # =========================
 def build_hat_prompt(brief: DesignBrief) -> str:
+    return build_product_prompt(brief, product_type="hat")
+
+
+def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> str:
+    ptype = (product_type or "hat").strip().lower()
     style = brief.style if brief.style in STYLE_DIRECTIVES else "icon-minimal"
     style_desc = STYLE_DIRECTIVES.get(style, "")
 
-    # Deterministic label context (Option B stability)
     if brief.include_text and brief.phrase:
         idx = abs(hash((brief.drop, brief.phrase, brief.motif))) % max(1, len(TEXT_PAIRING_CONTEXTS))
         label_context = TEXT_PAIRING_CONTEXTS[idx]
         text_part = (
             f'Include the exact text "{brief.phrase}" in bold, clean block lettering as a {label_context}. '
-            "No cursive. No thin strokes. No tiny text."
+            "Keep text large and short (1-3 words preferred)."
         )
     else:
         text_part = "No text. Icon-only."
 
-    # Keep micro-nostalgia as inspiration, not a literal scene
-    scene_part = (
-        f"Inspiration cues (do not draw a full scene): {brief.micro_niche}, {brief.era_situation}, "
-        f"{brief.object_state}, {brief.texture_cue}, {brief.variation_modifier}. "
-    )
-
+    drop_name = brief.drop_title or brief.drop
     vibe_part = f"Vibe: {brief.vibe}. " if brief.vibe else ""
     tone_part = f"Emotional tone: {brief.tone}. " if brief.tone else ""
-
     emb_style = f"Embroidery style hint: {brief.embroidery_style}. " if brief.embroidery_style else ""
     emb_focus = f"Embroidery placement/focus: {brief.embroidery_focus}. " if brief.embroidery_focus else ""
 
-    drop_name = brief.drop_title or brief.drop
-
-    # Control clusters: only allow multi-icon for certain archetypes
-    cluster_ok = style in ("sticker-sheet", "object-stack", "sleepover-core", "garage-box-core", "micro-pattern")
-    cluster_rule = (
-        "You may include a small cluster of 3–5 simple icons ONLY if the archetype implies it. "
-        if cluster_ok
-        else "Single icon only (no clusters). "
-    )
+    product_rules = PRODUCT_RULES.get(ptype, PRODUCT_RULES["hat"])
+    cw, ch = product_rules["canvas_px"]
+    sw, sh = product_rules["safe_in"]
+    iw, ih = product_rules["size_in"]
 
     return (
-        "Create an ORIGINAL, copyright-safe embroidery design for the front of a hat. "
-        "This is NOT a photo; it is clean, simplified, vector-like art suitable for embroidery. "
-        f"Collection: {drop_name}. "
-        f"{vibe_part}{tone_part}"
-        f"Motif: {brief.motif}. "
-        f"Color palette hint: {brief.palette_hint}. "
-        f"{emb_style}{emb_focus}"
+        "Create an ORIGINAL, copyright-safe embroidery design. "
+        f"Product type: {ptype}. "
+        f"Artboard must be exactly {cw}x{ch}px at {product_rules['dpi']} DPI ({iw}in x {ih}in). "
+        f"Design must be centered in the front panel safe area ({sw}in x {sh}in) with clear edge padding. "
+        f"Collection: {drop_name}. {vibe_part}{tone_part}"
+        f"Motif: {brief.motif}. Motif family: {brief.motif_family}. Frame: {brief.motif_frame}. "
+        f"Motif keywords: {brief.motif_keywords}. "
+        f"Center weight: {brief.center_weight or 'strong'}. Silhouette strength: {brief.silhouette_strength or 'iconic'}. "
+        f"Color palette hint: {brief.palette_hint}. {emb_style}{emb_focus}"
         f"Layout archetype: {style}. {style_desc} "
-        f"{cluster_rule}"
-        f"{scene_part}"
+        f"Inspiration cues (not full scene): {brief.micro_niche}, {brief.era_situation}, {brief.object_state}, {brief.variation_modifier}. "
         f"{text_part} "
-        "Embroidery constraints: "
-        f"max {MAX_THREAD_COLORS} solid thread colors, thick linework, bold readable shapes, "
-        "minimum stroke thickness is bold (no hairline strokes), "
-        "use 2–4 large shapes max, avoid inner micro-details, "
-        "no gradients, no shading, no photorealism. "
-        "No tiny details. No thin lines. No textures that require fine stitching. "
-        "High-contrast shapes with clean edges. "
-        "Single design only; no multiple panels; no background scene. "
-        "Centered composition with generous padding around the design. "
-        "Transparent background. "
-        "No brand names, no logos, no brand marks, no recognizable characters, no celebrity likenesses, "
-        "no TV/movie/game references, no console replicas, no parody of specific brands. "
-        "Do not include watermarks or signatures."
+        "Embroidery production constraints: use only solid fills, maximum 6 thread colors selected from "
+        f"{', '.join(EMBROIDERY_CONFIG.allowed_thread_palette)}. "
+        "No gradients. No distressed texture. No photographic imagery. "
+        "Avoid transparent holes in center forms when possible. Avoid thin lines and tiny detail. "
+        "Use bold iconic center-weighted shapes, thick strokes, and clean borders suitable for stitch-out. "
+        "Single centered composition only; no background scene, no watermark, no signature."
     )
