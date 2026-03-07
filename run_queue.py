@@ -95,6 +95,7 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "prompt_hash",
         "resolved_style",
         "quality_status",
+        "concept_risk",
         "quality_reason",
         "quality_json",
         "drop_seq",
@@ -295,6 +296,7 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "prompt_hash": "",
                 "resolved_style": "",
                 "quality_status": "",
+                "concept_risk": "",
                 "quality_reason": "",
                 "quality_json": "",
                 "drop_seq": "",
@@ -358,24 +360,36 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
                 failed += 1
                 continue
 
-        # concept gate (embroidery-first)
+        # concept gate (embroidery-first; block only clearly invalid concepts)
         try:
             brief_gate = brief_from_row(r, include_text=include_text)
             concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
-            if not concept_ok:
+            block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
+            risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
+
+            if block_reasons:
+                r["concept_risk"] = "HIGH"
                 r["quality_status"] = "FAIL"
-                r["quality_reason"] = "concept:" + ",".join(concept_reasons)
+                r["quality_reason"] = "concept:" + ",".join(block_reasons)
                 r["status"] = "HOLD_QUALITY"
                 rows[idx] = r
                 failed += 1
                 continue
+
+            if risk_reasons:
+                r["concept_risk"] = "MEDIUM"
+                r["quality_status"] = "REVIEW"
+                r["quality_reason"] = "concept_review:" + ",".join(risk_reasons)
+            else:
+                r["concept_risk"] = "LOW"
+                if (r.get("quality_status") or "").strip().upper() == "REVIEW" and (r.get("quality_reason") or "").startswith("concept_review:"):
+                    r["quality_status"] = ""
+                    r["quality_reason"] = ""
         except Exception as e:
-            r["quality_status"] = "FAIL"
-            r["quality_reason"] = f"concept_error:{type(e).__name__}"
-            r["status"] = "HOLD_QUALITY"
-            rows[idx] = r
-            failed += 1
-            continue
+            # fail-open on concept parser errors so generation can proceed
+            r["concept_risk"] = "MEDIUM"
+            r["quality_status"] = "REVIEW"
+            r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
 
         # risk gate
         risk_flag, risk_reason = _risk_check_row(r)
@@ -438,8 +452,15 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
 
         # quality gate
         ok, q_reason, q_json = pass_fail(img)
-        r["quality_status"] = "PASS" if ok else "FAIL"
-        r["quality_reason"] = q_reason or ""
+        prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
+        prior_reason = (r.get("quality_reason") or "").strip()
+
+        if ok:
+            r["quality_status"] = "REVIEW" if prior_review else "PASS"
+            r["quality_reason"] = prior_reason if prior_review else ""
+        else:
+            r["quality_status"] = "FAIL"
+            r["quality_reason"] = q_reason or ""
         try:
             r["quality_json"] = json.dumps(q_json)
         except Exception:
@@ -542,26 +563,37 @@ def process_one(*, auto_seed: bool = True) -> bool:
         phrase = pick_phrase("90s nostalgia")
         r["phrase"] = phrase
 
-    # concept gate (embroidery-first)
+    # concept gate (embroidery-first; block only clearly invalid concepts)
     try:
         brief_gate = brief_from_row(r, include_text=include_text)
         concept_ok, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
-        if not concept_ok:
+        block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
+        risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
+
+        if block_reasons:
+            r["concept_risk"] = "HIGH"
             r["quality_status"] = "FAIL"
-            r["quality_reason"] = "concept:" + ",".join(concept_reasons)
+            r["quality_reason"] = "concept:" + ",".join(block_reasons)
             r["status"] = "HOLD_QUALITY"
             rows[target_idx] = r
             save_queue(rows)
             log(f"🟨 Row {rid} failed concept gate: {r['quality_reason']}")
             return False
+
+        if risk_reasons:
+            r["concept_risk"] = "MEDIUM"
+            r["quality_status"] = "REVIEW"
+            r["quality_reason"] = "concept_review:" + ",".join(risk_reasons)
+        else:
+            r["concept_risk"] = "LOW"
+            if (r.get("quality_status") or "").strip().upper() == "REVIEW" and (r.get("quality_reason") or "").startswith("concept_review:"):
+                r["quality_status"] = ""
+                r["quality_reason"] = ""
     except Exception as e:
-        r["quality_status"] = "FAIL"
-        r["quality_reason"] = f"concept_error:{type(e).__name__}"
-        r["status"] = "HOLD_QUALITY"
-        rows[target_idx] = r
-        save_queue(rows)
-        log(f"🟨 Row {rid} concept gate errored: {e}")
-        return False
+        r["concept_risk"] = "MEDIUM"
+        r["quality_status"] = "REVIEW"
+        r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
+        log(f"🟨 Row {rid} concept gate errored (continuing): {e}")
 
     # Risk gate
     risk_flag, risk_reason = _risk_check_row(r)
@@ -632,8 +664,15 @@ def process_one(*, auto_seed: bool = True) -> bool:
     r["resolved_style"] = (r.get("style") or "").strip().lower()
 
     ok, q_reason, q_json = pass_fail(img)
-    r["quality_status"] = "PASS" if ok else "FAIL"
-    r["quality_reason"] = q_reason or ""
+    prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
+    prior_reason = (r.get("quality_reason") or "").strip()
+
+    if ok:
+        r["quality_status"] = "REVIEW" if prior_review else "PASS"
+        r["quality_reason"] = prior_reason if prior_review else ""
+    else:
+        r["quality_status"] = "FAIL"
+        r["quality_reason"] = q_reason or ""
     try:
         r["quality_json"] = json.dumps(q_json)
     except Exception:

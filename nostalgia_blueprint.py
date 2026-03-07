@@ -1136,27 +1136,53 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
 
 
 def evaluate_embroidery_concept(brief: DesignBrief, *, product_type: str = "hat") -> Tuple[bool, List[str]]:
+    """
+    Returns (is_allowed, reasons).
+    Blocks generation only for clearly invalid embroidery concepts.
+    Non-blocking quality concerns are returned as risk_* reasons.
+    """
     reasons: List[str] = []
+    block_reasons: List[str] = []
     motif_text = " ".join([
         brief.motif,
         brief.motif_keywords,
         brief.variation_modifier,
         brief.texture_cue,
         brief.style,
+        brief.palette_hint,
+        brief.embroidery_style,
+        brief.embroidery_focus,
+        brief.phrase,
     ]).lower()
-    if any(t in motif_text for t in ("gradient", "photo", "photoreal", "distressed", "grunge", "watercolor")):
-        reasons.append("concept_forbidden_render_style")
+
+    # Hard-block only clearly invalid requests.
+    if any(t in motif_text for t in ("gradient", "gradients", "ombre")):
+        block_reasons.append("concept_blocked_gradient")
+
+    if any(t in motif_text for t in ("photo", "photographic", "photoreal", "photorealistic", "realistic photo", "camera")):
+        block_reasons.append("concept_blocked_photographic")
+
+    if any(t in motif_text for t in ("thin line", "thin-line", "hairline", "micro detail", "micro-detail", "intricate linework", "ultra fine detail", "tiny detail")):
+        block_reasons.append("concept_blocked_micro_detail")
+
+    color_counts = [int(m.group(1)) for m in re.finditer(r"\b(\d{1,2})\s*(?:\+\s*)?(?:color|colors|colour|colours|thread|threads)\b", motif_text)]
+    if color_counts and max(color_counts) > 6:
+        block_reasons.append("concept_blocked_color_count_gt6")
+
+    # Non-blocking quality concerns should trigger review, not immediate rejection.
     if any(t in motif_text for t in ("tiny text", "paragraph", "wallpaper", "landscape", "full scene")):
-        reasons.append("concept_not_hat_compact")
+        reasons.append("risk_not_hat_compact")
     if brief.include_text and brief.phrase and len(brief.phrase) > 20:
-        reasons.append("text_too_long_for_embroidery")
+        reasons.append("risk_text_too_long_for_embroidery")
     if brief.center_weight and brief.center_weight.lower() not in ("strong", "medium"):
-        reasons.append("weak_center_weight")
+        reasons.append("risk_weak_center_weight")
     if brief.silhouette_strength and brief.silhouette_strength.lower() not in ("iconic", "solid"):
-        reasons.append("weak_silhouette")
+        reasons.append("risk_weak_silhouette")
     if product_type == "hat" and brief.motif_family == "monogram" and brief.include_text and len(brief.phrase.split()) > 2:
-        reasons.append("monogram_text_too_complex")
-    return (len(reasons) == 0, reasons)
+        reasons.append("risk_monogram_text_too_complex")
+
+    reasons.extend(block_reasons)
+    return (len(block_reasons) == 0, reasons)
 
 
 # =========================

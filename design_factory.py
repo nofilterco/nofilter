@@ -202,8 +202,9 @@ def build_design(
         brief.style = resolved_style
 
         concept_ok, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
-        if not concept_ok:
-            raise ValueError(f"Embroidery concept rejected: {','.join(concept_reasons)}")
+        block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
+        if block_reasons:
+            raise ValueError(f"Embroidery concept rejected: {','.join(block_reasons)}")
 
         prompt = build_product_prompt(brief, product_type=product_type)
         img = make_ai_art(prompt, canvas=CANVAS_HAT)
