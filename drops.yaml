@@ -1,5 +1,5 @@
 collection: 90s_Nostalgia_Hat_Drops
-version: v4
+version: v7
 
 safe_phrases:
   - "PROBABLY BUFFERING"
@@ -19,41 +19,35 @@ safe_phrases:
 
 merch_system:
   design_mix:
-    text_first: 80
-    text_with_accent: 15
-    icon_only: 5
+    wordmark: 24
+    stacked_phrase: 26
+    club_mark: 14
+    service_mark: 12
+    retro_label: 10
+    tech_status: 8
+    icon_with_caption: 6
   palette_families:
-    cream_green_red: ["#ffffff", "#01784e", "#cc3333"]
-    navy_cream: ["#333366", "#ffffff", "#96a1a8"]
-    black_cream: ["#000000", "#ffffff", "#a67843"]
-    tan_brown_red: ["#a67843", "#660000", "#e25c27"]
-    white_red_blue: ["#ffffff", "#cc3333", "#005397"]
-    forest_cream: ["#01784e", "#ffffff", "#7ba35a"]
-    slate_cream: ["#96a1a8", "#ffffff", "#333366"]
-    maroon_gold: ["#660000", "#ffcc00", "#a67843"]
-    vintage_blue_cream: ["#005397", "#3399ff", "#ffffff"]
+    navy_cream: ["#1c2a53", "#f3ead5", "#c5b18a"]
+    forest_cream: ["#1e4a38", "#f2ebd9", "#9dad7f"]
+    black_gold: ["#171717", "#f2e7c9", "#c8a541"]
+    tan_brown: ["#ab835a", "#513821", "#e2c8a0"]
+    red_white: ["#b3202e", "#f7f3ee", "#18264f"]
+    maroon_gold: ["#65172b", "#efdfb4", "#b59245"]
   composition_templates:
     - bold_single_line
     - stacked_two_line
-    - small_caps_service_mark
-    - faux_department_lockup
-    - varsity_wordmark
-    - retro_tech_wordmark
-    - icon_accent_left
-    - icon_accent_top
-    - monogram_subtitle
     - club_mark
+    - service_mark
+    - icon_left
+    - icon_above
 
 palette_hints:
-  - "cream_green_red"
   - "navy_cream"
-  - "black_cream"
-  - "tan_brown_red"
-  - "white_red_blue"
   - "forest_cream"
-  - "slate_cream"
+  - "black_gold"
+  - "tan_brown"
+  - "red_white"
   - "maroon_gold"
-  - "vintage_blue_cream"
 
 embroidery_styles:
   - "front-center satin stitch emblem"

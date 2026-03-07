@@ -1,31 +1,201 @@
 {
-  "example_phrases": [
-    "PROBABLY BUFFERING",
-    "LOW BATTERY CLUB",
-    "OFFLINE TODAY",
-    "ANALOG HEART",
-    "USER BUSY",
-    "CACHE MISS",
-    "AFTER SCHOOL CLUB",
-    "REWIND SERVICE",
-    "SEEN ONLINE",
-    "TOUCH GRASS LATER"
+  "pipeline": [
+    "concept",
+    "phrase_motif",
+    "design_family",
+    "layout_template",
+    "typography_system",
+    "palette_system",
+    "embroidery_rules",
+    "render_engine"
   ],
-  "example_typography_modes": [
-    "arched_phrase",
-    "bold_wordmark",
-    "clean_sans_caps",
-    "retro_tech_mono",
-    "script_accent",
-    "stacked_phrase",
-    "varsity_block"
+  "layout_template_examples": {
+    "bold_single_line": {
+      "text_placement": "centered single line",
+      "icon_placement": "none",
+      "line_spacing": 1.0,
+      "safe_area_padding": 60
+    },
+    "stacked_two_line": {
+      "text_placement": "vertical stack",
+      "icon_placement": "none",
+      "line_spacing": 1.12,
+      "safe_area_padding": 64
+    },
+    "club_mark": {
+      "text_placement": "stacked lockup",
+      "icon_placement": "optional top accent",
+      "line_spacing": 1.1,
+      "safe_area_padding": 54
+    },
+    "service_mark": {
+      "text_placement": "stacked with utility subline",
+      "icon_placement": "optional left accent",
+      "line_spacing": 1.06,
+      "safe_area_padding": 58
+    },
+    "icon_left": {
+      "text_placement": "center-left text block",
+      "icon_placement": "left accent icon",
+      "line_spacing": 1.0,
+      "safe_area_padding": 56
+    },
+    "icon_above": {
+      "text_placement": "centered beneath icon",
+      "icon_placement": "top accent icon",
+      "line_spacing": 1.08,
+      "safe_area_padding": 58
+    }
+  },
+  "generated_design_concepts": [
+    {
+      "phrase": "OFFLINE TODAY",
+      "motif": "status wordmark",
+      "design_family": "wordmark",
+      "layout_template": "bold_single_line",
+      "palette": "black_gold"
+    },
+    {
+      "phrase": "LOW BATTERY CLUB",
+      "motif": "club identity",
+      "design_family": "club_mark",
+      "layout_template": "club_mark",
+      "palette": "maroon_gold"
+    },
+    {
+      "phrase": "REWIND SERVICE",
+      "motif": "utility label",
+      "design_family": "service_mark",
+      "layout_template": "service_mark",
+      "palette": "tan_brown"
+    },
+    {
+      "phrase": "CACHE MISS",
+      "motif": "tech status",
+      "design_family": "tech_status",
+      "layout_template": "icon_left",
+      "palette": "navy_cream",
+      "icon": "cursor"
+    },
+    {
+      "phrase": "SIGNAL WEAK",
+      "motif": "pager status",
+      "design_family": "icon_with_caption",
+      "layout_template": "icon_above",
+      "palette": "red_white",
+      "icon": "pager_signal"
+    },
+    {
+      "phrase": "ANALOG HEART",
+      "motif": "retro label",
+      "design_family": "retro_label",
+      "layout_template": "stacked_two_line",
+      "palette": "forest_cream"
+    },
+    {
+      "phrase": "STILL LOADING",
+      "motif": "progress status",
+      "design_family": "tech_status",
+      "layout_template": "icon_left",
+      "palette": "navy_cream",
+      "icon": "loading_bar"
+    },
+    {
+      "phrase": "ARCADE TOKEN",
+      "motif": "token badge",
+      "design_family": "icon_with_caption",
+      "layout_template": "icon_above",
+      "palette": "maroon_gold",
+      "icon": "arcade_token"
+    },
+    {
+      "phrase": "NO AUTOSAVE",
+      "motif": "old tech joke",
+      "design_family": "stacked_phrase",
+      "layout_template": "stacked_two_line",
+      "palette": "black_gold"
+    },
+    {
+      "phrase": "AFTER SCHOOL CLUB",
+      "motif": "club lockup",
+      "design_family": "club_mark",
+      "layout_template": "club_mark",
+      "palette": "forest_cream"
+    },
+    {
+      "phrase": "LOCAL ONLY",
+      "motif": "service status",
+      "design_family": "service_mark",
+      "layout_template": "service_mark",
+      "palette": "tan_brown"
+    },
+    {
+      "phrase": "USER BUSY",
+      "motif": "simple word hat",
+      "design_family": "wordmark",
+      "layout_template": "bold_single_line",
+      "palette": "red_white"
+    },
+    {
+      "phrase": "PAGER MODE",
+      "motif": "signal icon",
+      "design_family": "icon_with_caption",
+      "layout_template": "icon_left",
+      "palette": "navy_cream",
+      "icon": "pager_signal"
+    },
+    {
+      "phrase": "INSERT TAPE",
+      "motif": "cassette accent",
+      "design_family": "tech_status",
+      "layout_template": "icon_above",
+      "palette": "forest_cream",
+      "icon": "cassette"
+    },
+    {
+      "phrase": "FLOPPY READY",
+      "motif": "disk icon",
+      "design_family": "icon_with_caption",
+      "layout_template": "icon_left",
+      "palette": "tan_brown",
+      "icon": "floppy"
+    },
+    {
+      "phrase": "SOFT REBOOT",
+      "motif": "status phrase",
+      "design_family": "stacked_phrase",
+      "layout_template": "stacked_two_line",
+      "palette": "maroon_gold"
+    },
+    {
+      "phrase": "DIAL TONE",
+      "motif": "retro system",
+      "design_family": "retro_label",
+      "layout_template": "stacked_two_line",
+      "palette": "black_gold"
+    },
+    {
+      "phrase": "RETRY SERVICE",
+      "motif": "service label",
+      "design_family": "service_mark",
+      "layout_template": "service_mark",
+      "palette": "red_white"
+    },
+    {
+      "phrase": "CRT FRIENDLY",
+      "motif": "display accent",
+      "design_family": "icon_with_caption",
+      "layout_template": "icon_above",
+      "palette": "navy_cream",
+      "icon": "crt"
+    },
+    {
+      "phrase": "QUIET MODE",
+      "motif": "minimal status",
+      "design_family": "wordmark",
+      "layout_template": "bold_single_line",
+      "palette": "forest_cream"
+    }
   ],
-  "example_layout_modes": [
-    "arched_top",
-    "icon_above_text",
-    "single_line_center",
-    "small_icon_left",
-    "two_line_stack"
-  ],
-  "note": "No media artifacts are generated in this sample set. This file is text-only metadata."
+  "note": "JSON-only architecture and concept examples. No binary sample files generated."
 }
