@@ -1,6 +1,7 @@
 import os
 import random
 import textwrap
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -292,108 +293,252 @@ def _fit_font(draw: ImageDraw.ImageDraw, text: str, area: Tuple[int, int, int, i
     return _load_font(font_path, min_size)
 
 FONT_ROLES = {
-    "bold_sans": os.path.join("assets", "fonts", "Montserrat-Black.ttf"),
-    "condensed_caps": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
-    "varsity_block": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
-    "retro_mono": os.path.join("assets", "fonts", "Montserrat-SemiBold.ttf"),
-    "understated_caps": os.path.join("assets", "fonts", "Montserrat-Bold.ttf"),
-    "soft_script_accent": os.path.join("assets", "fonts", "Montserrat-MediumItalic.ttf"),
+    "headline": os.path.join("assets", "fonts", "Montserrat-Black.ttf"),
+    "subheadline": os.path.join("assets", "fonts", "Montserrat-Bold.ttf"),
+    "condensed": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
+    "mono_tech": os.path.join("assets", "fonts", "Montserrat-SemiBold.ttf"),
+    "varsity": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
 }
 
 PALETTE_FAMILIES = {
-    "cream_green_red": ["#ffffff", "#01784e", "#cc3333"],
-    "navy_cream": ["#333366", "#ffffff", "#96a1a8"],
-    "black_cream": ["#000000", "#ffffff", "#a67843"],
-    "tan_brown_red": ["#a67843", "#660000", "#e25c27"],
-    "white_red_blue": ["#ffffff", "#cc3333", "#005397"],
-    "forest_cream": ["#01784e", "#ffffff", "#7ba35a"],
-    "slate_cream": ["#96a1a8", "#ffffff", "#333366"],
-    "maroon_gold": ["#660000", "#ffcc00", "#a67843"],
-    "vintage_blue_cream": ["#005397", "#3399ff", "#ffffff"],
+    "navy_cream": {"primary": "#1c2a53", "secondary": "#f3ead5", "accent": "#c5b18a"},
+    "forest_cream": {"primary": "#1e4a38", "secondary": "#f2ebd9", "accent": "#9dad7f"},
+    "black_gold": {"primary": "#171717", "secondary": "#f2e7c9", "accent": "#c8a541"},
+    "tan_brown": {"primary": "#ab835a", "secondary": "#513821", "accent": "#e2c8a0"},
+    "red_white": {"primary": "#b3202e", "secondary": "#f7f3ee", "accent": "#18264f"},
+    "maroon_gold": {"primary": "#65172b", "secondary": "#efdfb4", "accent": "#b59245"},
 }
 
-TEMPLATE_CONFIG = {
-    "bold_single_line": {"layout": "single_line_center", "max_words": 3, "font_roles": ["condensed_caps", "understated_caps"], "icon": "none"},
-    "stacked_two_line": {"layout": "two_line_stack", "max_words": 4, "font_roles": ["bold_sans", "understated_caps"], "icon": "optional"},
-    "small_caps_service_mark": {"layout": "single_line_center", "max_words": 4, "font_roles": ["understated_caps", "retro_mono"], "icon": "optional"},
-    "faux_department_lockup": {"layout": "two_line_stack", "max_words": 4, "font_roles": ["varsity_block", "understated_caps"], "icon": "optional"},
-    "varsity_wordmark": {"layout": "single_line_center", "max_words": 2, "font_roles": ["varsity_block", "understated_caps"], "icon": "none"},
-    "retro_tech_wordmark": {"layout": "single_line_center", "max_words": 3, "font_roles": ["retro_mono", "bold_sans"], "icon": "optional"},
-    "icon_accent_left": {"layout": "small_icon_left", "max_words": 4, "font_roles": ["bold_sans", "understated_caps"], "icon": "required"},
-    "icon_accent_top": {"layout": "icon_above_text", "max_words": 4, "font_roles": ["condensed_caps", "understated_caps"], "icon": "required"},
-    "monogram_subtitle": {"layout": "arched_top", "max_words": 3, "font_roles": ["condensed_caps", "retro_mono"], "icon": "none"},
-    "club_mark": {"layout": "two_line_stack", "max_words": 4, "font_roles": ["varsity_block", "retro_mono"], "icon": "optional"},
+DESIGN_FAMILY_TO_TEMPLATES = {
+    "wordmark": ["bold_single_line"],
+    "stacked_phrase": ["stacked_two_line"],
+    "club_mark": ["club_mark"],
+    "service_mark": ["service_mark"],
+    "retro_label": ["icon_above", "stacked_two_line"],
+    "tech_status": ["icon_left", "bold_single_line"],
+    "icon_with_caption": ["icon_left", "icon_above"],
+}
+
+LAYOUT_TEMPLATES = {
+    "bold_single_line": {"text": "center", "icon": "none", "line_spacing": 1.0, "safe_padding": 60},
+    "stacked_two_line": {"text": "stacked", "icon": "none", "line_spacing": 1.12, "safe_padding": 64},
+    "club_mark": {"text": "stacked", "icon": "optional_top", "line_spacing": 1.1, "safe_padding": 54},
+    "service_mark": {"text": "stacked", "icon": "optional_left", "line_spacing": 1.06, "safe_padding": 58},
+    "icon_left": {"text": "center_left", "icon": "left", "line_spacing": 1.0, "safe_padding": 56},
+    "icon_above": {"text": "center", "icon": "top", "line_spacing": 1.08, "safe_padding": 58},
+}
+
+TEMPLATE_FONT_SYSTEM = {
+    "bold_single_line": ("condensed", "subheadline"),
+    "stacked_two_line": ("headline", "subheadline"),
+    "club_mark": ("varsity", "subheadline"),
+    "service_mark": ("headline", "mono_tech"),
+    "icon_left": ("headline", "subheadline"),
+    "icon_above": ("headline", "mono_tech"),
 }
 
 ICON_FAMILY_TO_MOTIF = {
-    "cassette": "cassette", "loading bar": "loading", "cursor": "cursor", "battery": "battery",
-    "floppy": "floppy", "crt": "crt", "joystick": "joystick", "popcorn": "popcorn",
-    "pizza slice": "pizza", "smiley": "smiley", "moon/star": "moon", "arcade token": "arcade",
-    "receipt": "receipt", "pager signal": "signal",
+    "cassette": "cassette",
+    "battery": "battery",
+    "cursor": "cursor",
+    "loading bar": "loading_bar",
+    "floppy": "floppy",
+    "crt": "crt",
+    "joystick": "joystick",
+    "pager signal": "pager_signal",
+    "arcade token": "arcade_token",
+    "starburst": "starburst",
 }
+
+
+@dataclass
+class TypographyLayout:
+    lines: List[str]
+    font_primary: str
+    tracking: int
+    line_spacing: float
 
 
 def _pick_palette_family(name: str, rng: random.Random) -> Tuple[str, List[Tuple[int, int, int]]]:
     fam = name if name in PALETTE_FAMILIES else rng.choice(list(PALETTE_FAMILIES.keys()))
-    return fam, [_hex_to_rgb(c) for c in PALETTE_FAMILIES[fam][:4]]
+    p = PALETTE_FAMILIES[fam]
+    return fam, [_hex_to_rgb(p[k]) for k in ("primary", "secondary", "accent")]
 
 
-def _fit_phrase_for_template(phrase: str, template: str) -> Tuple[str, bool]:
-    cfg = TEMPLATE_CONFIG.get(template, TEMPLATE_CONFIG["bold_single_line"])
+def _resolve_design_family(brief) -> str:
+    family = (getattr(brief, "design_family", "") or "").strip().lower()
+    return family if family in DESIGN_FAMILY_TO_TEMPLATES else "stacked_phrase"
+
+
+def _resolve_template(brief, family: str, phrase: str) -> str:
+    requested = (getattr(brief, "composition_template", "") or "").strip().lower()
+    allowed = DESIGN_FAMILY_TO_TEMPLATES[family]
+    if requested in allowed and requested in LAYOUT_TEMPLATES:
+        return requested
+    if len(phrase.split()) <= 1 and "bold_single_line" in allowed:
+        return "bold_single_line"
+    return allowed[0]
+
+
+def _split_lines_for_template(phrase: str, template: str) -> List[str]:
     words = phrase.split()
-    if len(words) <= cfg["max_words"]:
-        return phrase, True
-    short = " ".join(words[: cfg["max_words"]])
-    return short, False
+    if template == "bold_single_line":
+        return [phrase]
+    if len(words) <= 2:
+        return words if len(words) == 2 else [phrase]
+    if template in ("stacked_two_line", "club_mark", "service_mark"):
+        mid = max(1, len(words) // 2)
+        return [" ".join(words[:mid]), " ".join(words[mid:])]
+    if len(words) >= 5:
+        return [" ".join(words[:3]), " ".join(words[3:])]
+    return [phrase]
 
 
-def _draw_typography_template(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[int, int, int, int], template: str, color: Tuple[int, int, int]) -> Dict[str, str]:
-    cfg = TEMPLATE_CONFIG.get(template, TEMPLATE_CONFIG["bold_single_line"])
-    primary_role = cfg["font_roles"][0]
-    font_path = FONT_ROLES[primary_role]
-    text = (phrase or "OFFLINE TODAY").strip().upper()
-
-    x0, y0, x1, y1 = text_box
-    cx = (x0 + x1) // 2
-    fill = color + (255,)
-    tracking = 1 if primary_role in ("condensed_caps", "varsity_block") else 0
-
-    if template in ("stacked_two_line", "faux_department_lockup", "club_mark") and " " in text:
-        lines = _split_phrase_for_stack(text)
-        y = y0 + 8
-        used = "true"
-        for ln in lines:
-            font = _fit_font(draw, ln, text_box, font_path, start_size=92, min_size=34, tracking=tracking)
-            w = _draw_spaced_text(draw, (0, 0), ln, font, fill, tracking=tracking)
-            _draw_spaced_text(draw, (cx - w // 2, y), ln, font, fill, tracking=tracking)
-            bb = draw.textbbox((0, 0), ln, font=font)
-            y += (bb[3] - bb[1]) + 6
-        return {"tracking": str(tracking), "stacked": used, "font_role": primary_role}
-
-    font = _fit_font(draw, text, text_box, font_path, start_size=104, min_size=34, tracking=tracking)
-    w = _draw_spaced_text(draw, (0, 0), text, font, fill, tracking=tracking)
+def _measure_with_tracking(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, tracking: int) -> int:
     bb = draw.textbbox((0, 0), text, font=font)
-    draw_y = y0 + max(0, ((y1 - y0) - (bb[3] - bb[1])) // 2)
-    _draw_spaced_text(draw, (cx - w // 2, draw_y), text, font, fill, tracking=tracking)
-    return {"tracking": str(tracking), "stacked": "false", "font_role": primary_role}
+    width = bb[2] - bb[0]
+    if hasattr(font, "getlength"):
+        width = int(round(font.getlength(text)))
+    return width + max(0, len(text) - 1) * tracking
 
 
-def _layout_boxes(layout: str, safe_x0: int, safe_y0: int, safe_x1: int, safe_y1: int) -> Tuple[Tuple[int, int, int, int], Tuple[int, int, int, int]]:
-    icon_box = (safe_x0 + 360, safe_y0 + 24, safe_x1 - 360, safe_y0 + 170)
-    text_box = (safe_x0 + 70, safe_y0 + 150, safe_x1 - 70, safe_y1 - 32)
-    if layout == "single_line_center":
-        text_box = (safe_x0 + 60, safe_y0 + 190, safe_x1 - 60, safe_y1 - 45)
-    elif layout == "two_line_stack":
-        text_box = (safe_x0 + 80, safe_y0 + 130, safe_x1 - 80, safe_y1 - 30)
-    elif layout == "arched_top":
-        text_box = (safe_x0 + 40, safe_y0 + 95, safe_x1 - 40, safe_y1 - 65)
-    elif layout == "icon_above_text":
-        icon_box = (safe_x0 + 450, safe_y0 + 24, safe_x1 - 450, safe_y0 + 150)
-        text_box = (safe_x0 + 60, safe_y0 + 165, safe_x1 - 60, safe_y1 - 30)
-    elif layout == "small_icon_left":
-        icon_box = (safe_x0 + 85, safe_y0 + 185, safe_x0 + 220, safe_y0 + 320)
-        text_box = (safe_x0 + 245, safe_y0 + 170, safe_x1 - 45, safe_y1 - 28)
+def _draw_tracked_text(draw: ImageDraw.ImageDraw, origin: Tuple[int, int], text: str, font: ImageFont.ImageFont, fill: Tuple[int, int, int, int], tracking: int) -> int:
+    x, y = origin
+    cursor = x
+    for i, ch in enumerate(text):
+        draw.text((cursor, y), ch, font=font, fill=fill)
+        bb = draw.textbbox((0, 0), ch, font=font)
+        advance = bb[2] - bb[0]
+        if hasattr(font, "getlength"):
+            advance = int(round(font.getlength(ch)))
+        cursor += advance + (tracking if i < len(text) - 1 else 0)
+    return cursor - x
+
+
+def _fit_font_size(draw: ImageDraw.ImageDraw, lines: List[str], text_box: Tuple[int, int, int, int], font_path: str, line_spacing: float, tracking: int, *, start: int = 132, min_size: int = 26) -> ImageFont.ImageFont:
+    x0, y0, x1, y1 = text_box
+    max_w = x1 - x0
+    max_h = y1 - y0
+    size = start
+    while size >= min_size:
+        font = _load_font(font_path, size)
+        widths = [_measure_with_tracking(draw, line, font, tracking) for line in lines]
+        line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
+        total_h = int(line_h * len(lines) * line_spacing)
+        if max(widths) <= max_w and total_h <= max_h:
+            return font
+        size -= 2
+    return _load_font(font_path, min_size)
+
+
+def _layout_boxes(template: str, safe_x0: int, safe_y0: int, safe_x1: int, safe_y1: int):
+    cfg = LAYOUT_TEMPLATES[template]
+    pad = int(cfg["safe_padding"])
+    text_box = (safe_x0 + pad, safe_y0 + pad, safe_x1 - pad, safe_y1 - pad)
+    icon_box = (safe_x0 + 60, safe_y0 + 120, safe_x0 + 220, safe_y0 + 280)
+    if template == "icon_left":
+        icon_box = (safe_x0 + pad, safe_y0 + 150, safe_x0 + pad + 150, safe_y0 + 300)
+        text_box = (icon_box[2] + 28, safe_y0 + 110, safe_x1 - pad, safe_y1 - 80)
+    elif template == "icon_above":
+        icon_box = (safe_x0 + 445, safe_y0 + 30, safe_x1 - 445, safe_y0 + 150)
+        text_box = (safe_x0 + pad, safe_y0 + 175, safe_x1 - pad, safe_y1 - 45)
+    elif template == "club_mark":
+        icon_box = (safe_x0 + 455, safe_y0 + 45, safe_x1 - 455, safe_y0 + 145)
+        text_box = (safe_x0 + pad, safe_y0 + 160, safe_x1 - pad, safe_y1 - 45)
     return icon_box, text_box
+
+
+def _draw_icon_v2(draw: ImageDraw.ImageDraw, motif: str, box: Tuple[int, int, int, int], colors: Tuple[Tuple[int, int, int], Tuple[int, int, int], Tuple[int, int, int]], stroke: int) -> str:
+    x0, y0, x1, y1 = box
+    cx, cy = (x0 + x1) // 2, (y0 + y1) // 2
+    w, h = x1 - x0, y1 - y0
+    p, s, a = colors
+    col_p, col_s, col_a = p + (255,), s + (255,), a + (255,)
+    if motif == "cassette":
+        draw.rounded_rectangle(box, radius=10, outline=col_p, width=stroke)
+        draw.rectangle((x0 + w * 0.16, y0 + h * 0.32, x1 - w * 0.16, y0 + h * 0.48), fill=col_s)
+    elif motif == "battery":
+        draw.rounded_rectangle((x0, y0 + h * 0.08, x1 - stroke * 2, y1 - h * 0.08), radius=8, outline=col_p, width=stroke)
+        draw.rectangle((x1 - stroke * 2, cy - h * 0.13, x1, cy + h * 0.13), fill=col_p)
+        draw.rectangle((x0 + w * 0.12, y0 + h * 0.22, x0 + w * 0.45, y1 - h * 0.22), fill=col_s)
+    elif motif == "cursor":
+        draw.polygon([(x0 + w * 0.2, y0 + h * 0.08), (x0 + w * 0.74, cy), (x0 + w * 0.48, cy + h * 0.06), (x0 + w * 0.62, y1 - h * 0.08), (x0 + w * 0.46, y1 - h * 0.02), (x0 + w * 0.31, cy + h * 0.2), (x0 + w * 0.2, cy + h * 0.24)], fill=col_p)
+    elif motif == "loading_bar":
+        draw.rounded_rectangle(box, radius=10, outline=col_p, width=stroke)
+        seg = int(w * 0.14)
+        for i in range(5):
+            color = col_s if i < 3 else col_a
+            draw.rectangle((x0 + w * 0.1 + i * seg, y0 + h * 0.32, x0 + w * 0.1 + i * seg + seg - 5, y1 - h * 0.32), fill=color)
+    elif motif == "floppy":
+        draw.rectangle(box, outline=col_p, width=stroke)
+        draw.rectangle((x0 + w * 0.12, y0 + h * 0.1, x1 - w * 0.12, y0 + h * 0.38), fill=col_s)
+    elif motif == "crt":
+        draw.rounded_rectangle((x0, y0 + h * 0.1, x1, y1 - h * 0.12), radius=12, outline=col_p, width=stroke)
+        draw.rectangle((x0 + w * 0.12, y0 + h * 0.22, x1 - w * 0.12, y1 - h * 0.26), outline=col_s, width=max(2, stroke - 2))
+    elif motif == "joystick":
+        draw.rounded_rectangle((x0 + w * 0.08, y0 + h * 0.52, x1 - w * 0.08, y1), radius=14, outline=col_p, width=stroke)
+        draw.ellipse((cx - w * 0.1, y0 + h * 0.1, cx + w * 0.1, y0 + h * 0.3), fill=col_s)
+        draw.rectangle((cx - w * 0.025, y0 + h * 0.28, cx + w * 0.025, y0 + h * 0.52), fill=col_s)
+    elif motif == "pager_signal":
+        draw.rounded_rectangle((x0 + w * 0.12, y0 + h * 0.3, x1 - w * 0.12, y1), radius=8, outline=col_p, width=stroke)
+        draw.line((cx, y0 + h * 0.08, cx, y0 + h * 0.3), fill=col_p, width=stroke)
+    elif motif == "arcade_token":
+        draw.ellipse(box, outline=col_p, width=stroke)
+        draw.ellipse((x0 + w * 0.2, y0 + h * 0.2, x1 - w * 0.2, y1 - h * 0.2), outline=col_s, width=max(2, stroke - 2))
+    elif motif == "starburst":
+        points = [(cx, y0), (cx + w * 0.18, cy - h * 0.14), (x1, cy), (cx + w * 0.18, cy + h * 0.14), (cx, y1), (cx - w * 0.18, cy + h * 0.14), (x0, cy), (cx - w * 0.18, cy - h * 0.14)]
+        draw.polygon(points, fill=col_s, outline=col_p)
+    else:
+        return "generic"
+    return "refined"
+
+
+def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[int, int, int, int], template: str, color: Tuple[int, int, int]) -> Dict[str, str]:
+    phrase = (phrase or "OFFLINE TODAY").upper()
+    lines = _split_lines_for_template(phrase, template)
+    tracking = 2 if template in ("bold_single_line", "club_mark") else 1
+    font_role = TEMPLATE_FONT_SYSTEM.get(template, ("headline", "subheadline"))[0]
+    spacing = float(LAYOUT_TEMPLATES[template]["line_spacing"])
+    font = _fit_font_size(draw, lines, text_box, FONT_ROLES[font_role], spacing, tracking)
+    fill = color + (255,)
+    x0, y0, x1, y1 = text_box
+    line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
+    total_h = int(line_h * len(lines) * spacing)
+    y = y0 + ((y1 - y0) - total_h) // 2
+    for line in lines:
+        w = _measure_with_tracking(draw, line, font, tracking)
+        x = x0 + ((x1 - x0) - w) // 2
+        _draw_tracked_text(draw, (x, y), line, font, fill, tracking)
+        y += int(line_h * spacing)
+    return {"tracking": str(tracking), "stacked": "true" if len(lines) > 1 else "false", "font_role": font_role, "line_count": str(len(lines))}
+
+
+def _validate_composition(phrase: str, template: str, icon_present: bool, icon_box: Tuple[int, int, int, int], text_box: Tuple[int, int, int, int]) -> List[str]:
+    failures: List[str] = []
+    text_w = text_box[2] - text_box[0]
+    text_h = text_box[3] - text_box[1]
+    icon_area = max(1, (icon_box[2] - icon_box[0]) * (icon_box[3] - icon_box[1])) if icon_present else 0
+    text_area = max(1, text_w * text_h)
+    if text_w < int(HAT_SAFE_AREA[0] * 0.45):
+        failures.append("visual_balance")
+    if phrase and max(len(w) for w in phrase.split()) > 14:
+        failures.append("text_readability")
+    if icon_present and icon_area > int(text_area * 0.55):
+        failures.append("icon_dominance")
+    if template not in LAYOUT_TEMPLATES:
+        failures.append("plate_dependency")
+    return failures
+
+
+def _apply_embroidery_rules(phrase: str, template: str, icon_present: bool) -> List[str]:
+    rules: List[str] = []
+    if phrase and len(phrase) <= 8 and template != "bold_single_line":
+        rules.append("word_should_fill_area")
+    if phrase and len(phrase.split()) <= 2 and template in ("icon_left", "icon_above") and not icon_present:
+        rules.append("short_phrase_should_stack")
+    if phrase and len(phrase) >= 18 and template == "bold_single_line":
+        rules.append("long_phrase_should_wrap")
+    return rules
 
 
 def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dict[str, str]]:
@@ -412,19 +557,14 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
     if design_mode == "word_hat":
         phrase = phrase.split()[0] if phrase else "OFFLINE"
 
-    template = (getattr(brief, "composition_template", "") or "bold_single_line").strip().lower()
-    if template not in TEMPLATE_CONFIG:
-        template = "icon_accent_left" if design_mode == "icon_phrase_hat" else "bold_single_line"
-
-    phrase, fits_template = _fit_phrase_for_template(phrase, template)
-    if not fits_template and design_mode != "icon_only":
+    family = _resolve_design_family(brief)
+    template = _resolve_template(brief, family, phrase)
+    if design_mode == "word_hat":
+        template = "bold_single_line"
+    if design_mode == "icon_phrase_hat" and template not in ("icon_left", "icon_above"):
+        template = "icon_left"
+    if len(phrase.split()) >= 4 and template == "bold_single_line":
         template = "stacked_two_line"
-
-    layout = TEMPLATE_CONFIG.get(template, TEMPLATE_CONFIG["bold_single_line"])["layout"]
-    icon_expected = TEMPLATE_CONFIG.get(template, {}).get("icon")
-    if design_mode == "icon_phrase_hat" and icon_expected == "none":
-        template = "icon_accent_left"
-        layout = "small_icon_left"
 
     palette_family, colors = _pick_palette_family((getattr(brief, "palette_family", "") or "").strip().lower(), rng)
     c1, c2, c3 = colors[:3]
@@ -432,14 +572,14 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
     canvas = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
     draw = ImageDraw.Draw(canvas)
     stroke = max(6, int(CANVAS_HAT[0] * 0.0055))
-    icon_box, text_box = _layout_boxes(layout, safe_x0, safe_y0, safe_x1, safe_y1)
+    icon_box, text_box = _layout_boxes(template, safe_x0, safe_y0, safe_x1, safe_y1)
 
     icon_family = (getattr(brief, "accent_icon_family", "none") or "none").strip().lower()
     motif = ICON_FAMILY_TO_MOTIF.get(icon_family, icon_family)
     icon_present = design_mode in ("icon_phrase_hat", "icon_only") and icon_family != "none"
     shape_quality = "none"
     if icon_present:
-        shape_quality = _draw_icon(draw, motif, icon_box, (c1, c2, c3, c1), stroke)
+        shape_quality = _draw_icon_v2(draw, motif, icon_box, (c1, c2, c3), stroke)
         if shape_quality == "generic":
             icon_present = False
             if design_mode == "icon_only":
@@ -447,22 +587,31 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
 
     typo_info = {}
     if design_mode != "icon_only":
-        typo_info = _draw_typography_template(draw, phrase, text_box, template, c1)
+        typo_info = _draw_typography_v2(draw, phrase, text_box, template, c1)
 
+    failures = _validate_composition(phrase, template, icon_present, icon_box, text_box)
+    rule_flags = _apply_embroidery_rules(phrase, template, icon_present)
     safe_fill = (text_box[2] - text_box[0]) / float(HAT_SAFE_AREA[0])
     merch_taste = int(getattr(brief, "merch_taste_score", "8") or 8)
-    if shape_quality == "generic":
-        merch_taste = max(5, merch_taste - 2)
+
+    layout_archetype = {
+        "bold_single_line": "single_line_center",
+        "stacked_two_line": "two_line_stack",
+        "club_mark": "two_line_stack",
+        "service_mark": "two_line_stack",
+        "icon_left": "small_icon_left",
+        "icon_above": "icon_above_text",
+    }[template]
 
     meta = {
-        "composition_mode": f"{design_mode}_{layout}",
+        "composition_mode": f"{design_mode}_{layout_archetype}",
         "composition_template": template,
         "background_mode": "transparent",
         "frame_mode": "none",
         "safe_area_fill_pct": f"{safe_fill:.3f}",
         "motif_bbox": f"{icon_box[0]},{icon_box[1]},{icon_box[2]},{icon_box[3]}" if icon_present else "",
         "vector_mode_used": "true",
-        "layout_archetype": layout,
+        "layout_archetype": layout_archetype,
         "type_treatment": typo_info.get("font_role", ""),
         "icon_treatment": "accent_micro" if icon_present else "none",
         "visual_energy": "balanced",
@@ -472,7 +621,7 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
         "letter_spacing": typo_info.get("tracking", "0"),
         "vertical_stacking": typo_info.get("stacked", "false"),
         "centered_layout": "true",
-        "design_family": str(getattr(brief, "design_family", "text_first")),
+        "design_family": family,
         "slogan_family": str(getattr(brief, "slogan_family", "")),
         "font_pairing": str(getattr(brief, "font_pairing", "")),
         "palette_family": palette_family,
@@ -481,14 +630,19 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
         "phrase_category": str(getattr(brief, "phrase_category", "")),
         "merch_taste_score": str(max(1, min(10, merch_taste))),
         "reroll_reason": str(getattr(brief, "reroll_reason", "")),
-        "palette_used": ",".join(PALETTE_FAMILIES[palette_family]),
+        "palette_used": ",".join([PALETTE_FAMILIES[palette_family]["primary"], PALETTE_FAMILIES[palette_family]["secondary"], PALETTE_FAMILIES[palette_family]["accent"]]),
     }
 
     meta = _score_hat_design(meta, brief)
-    if int(meta.get("typography_quality_score", "8") or 8) < 6 and design_mode != "icon_only":
-        meta["reroll_reason"] = "typography_weak"
     if int(meta.get("visual_balance_score", "8") or 8) < 6:
         meta["reroll_reason"] = "visual_balance_weak"
+    if failures:
+        meta["rejected"] = "true"
+        meta["reroll_reason"] = "composition_failed_" + "_".join(sorted(set(failures)))
+    if rule_flags and not meta.get("reroll_reason"):
+        meta["reroll_reason"] = "embroidery_rules_" + "_".join(rule_flags)
+    if rule_flags:
+        meta["embroidery_rule_flags"] = ",".join(rule_flags)
 
     return canvas, meta
 

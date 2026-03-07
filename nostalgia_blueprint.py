@@ -624,39 +624,36 @@ NOSTALGIA_AXES = ["80s_analog", "90s_mall", "2000s_internet", "arcade_night", "a
 
 
 MERCH_DESIGN_FAMILIES = {
-    "text_first": 80,
-    "text_with_accent": 15,
-    "icon_only": 5,
+    "wordmark": 24,
+    "stacked_phrase": 26,
+    "club_mark": 14,
+    "service_mark": 12,
+    "retro_label": 10,
+    "tech_status": 8,
+    "icon_with_caption": 6,
 }
 
 CURATED_PALETTE_FAMILIES = {
-    "cream_green_red": ["#ffffff", "#01784e", "#cc3333"],
-    "navy_cream": ["#333366", "#ffffff", "#96a1a8"],
-    "black_cream": ["#000000", "#ffffff", "#a67843"],
-    "tan_brown_red": ["#a67843", "#660000", "#e25c27"],
-    "white_red_blue": ["#ffffff", "#cc3333", "#005397"],
-    "forest_cream": ["#01784e", "#ffffff", "#7ba35a"],
-    "slate_cream": ["#96a1a8", "#ffffff", "#333366"],
-    "maroon_gold": ["#660000", "#ffcc00", "#a67843"],
-    "vintage_blue_cream": ["#005397", "#3399ff", "#ffffff"],
+    "navy_cream": ["#1c2a53", "#f3ead5", "#c5b18a"],
+    "forest_cream": ["#1e4a38", "#f2ebd9", "#9dad7f"],
+    "black_gold": ["#171717", "#f2e7c9", "#c8a541"],
+    "tan_brown": ["#ab835a", "#513821", "#e2c8a0"],
+    "red_white": ["#b3202e", "#f7f3ee", "#18264f"],
+    "maroon_gold": ["#65172b", "#efdfb4", "#b59245"],
 }
 
 COMPOSITION_TEMPLATES = {
-    "bold_single_line": {"max_words": 3, "font_pairing": "condensed_caps+understated_caps", "icon_support": "none", "tone": "direct"},
-    "stacked_two_line": {"max_words": 4, "font_pairing": "bold_sans+understated_caps", "icon_support": "optional", "tone": "balanced"},
-    "small_caps_service_mark": {"max_words": 4, "font_pairing": "understated_caps+retro_mono", "icon_support": "optional", "tone": "service"},
-    "faux_department_lockup": {"max_words": 4, "font_pairing": "varsity_block+understated_caps", "icon_support": "optional", "tone": "institutional"},
-    "varsity_wordmark": {"max_words": 2, "font_pairing": "varsity_block+understated_caps", "icon_support": "none", "tone": "club"},
-    "retro_tech_wordmark": {"max_words": 3, "font_pairing": "retro_mono+bold_sans", "icon_support": "optional", "tone": "tech"},
-    "icon_accent_left": {"max_words": 4, "font_pairing": "bold_sans+understated_caps", "icon_support": "required", "tone": "accent"},
-    "icon_accent_top": {"max_words": 4, "font_pairing": "condensed_caps+understated_caps", "icon_support": "required", "tone": "accent"},
-    "monogram_subtitle": {"max_words": 3, "font_pairing": "condensed_caps+retro_mono", "icon_support": "none", "tone": "premium"},
-    "club_mark": {"max_words": 4, "font_pairing": "varsity_block+retro_mono", "icon_support": "optional", "tone": "club"},
+    "bold_single_line": {"max_words": 2, "font_pairing": "condensed+headline", "icon_support": "none", "tone": "direct"},
+    "stacked_two_line": {"max_words": 5, "font_pairing": "headline+subheadline", "icon_support": "none", "tone": "balanced"},
+    "club_mark": {"max_words": 4, "font_pairing": "varsity+subheadline", "icon_support": "optional", "tone": "club"},
+    "service_mark": {"max_words": 5, "font_pairing": "headline+mono_tech", "icon_support": "optional", "tone": "service"},
+    "icon_left": {"max_words": 5, "font_pairing": "headline+subheadline", "icon_support": "required", "tone": "accent"},
+    "icon_above": {"max_words": 5, "font_pairing": "headline+mono_tech", "icon_support": "required", "tone": "accent"},
 }
 
 ACCENT_ICON_FAMILIES = [
-    "cassette", "loading bar", "cursor", "battery", "floppy", "crt", "joystick",
-    "popcorn", "pizza slice", "smiley", "moon/star", "arcade token", "receipt", "pager signal",
+    "cassette", "battery", "cursor", "loading bar", "floppy", "crt", "joystick",
+    "pager signal", "arcade token", "starburst",
 ]
 
 PHRASE_CATEGORIES = [
@@ -1061,11 +1058,11 @@ class DesignBrief:
     commercial_style_reason: str = ""
 
     # Curated merch-plan metadata
-    design_family: str = "text_first"
+    design_family: str = "stacked_phrase"
     slogan_family: str = ""
     font_pairing: str = ""
     palette_family: str = ""
-    composition_template: str = ""
+    composition_template: str = "stacked_two_line"
     accent_icon_family: str = "none"
     merch_style: str = ""
     phrase_category: str = ""
@@ -1087,9 +1084,13 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
 
     design_family = _pick_weighted([(k, v) for k, v in MERCH_DESIGN_FAMILIES.items()])
     design_mode = {
-        "text_first": random.choice(["phrase_hat", "word_hat", "phrase_hat", "phrase_hat"]),
-        "text_with_accent": "icon_phrase_hat",
-        "icon_only": "icon_only",
+        "wordmark": "word_hat",
+        "stacked_phrase": "phrase_hat",
+        "club_mark": "phrase_hat",
+        "service_mark": "phrase_hat",
+        "retro_label": "phrase_hat",
+        "tech_status": "icon_phrase_hat",
+        "icon_with_caption": "icon_phrase_hat",
     }[design_family]
 
     phrase_category = random.choice(PHRASE_CATEGORIES)
@@ -1107,32 +1108,31 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         name for name, cfg in COMPOSITION_TEMPLATES.items()
         if (len(phrase.split()) if phrase else 1) <= int(cfg.get("max_words", 4))
     ]
-    if design_mode == "icon_phrase_hat":
-        template_choices = [t for t in template_choices if t in ("icon_accent_left", "icon_accent_top", "club_mark", "retro_tech_wordmark")]
-    if design_mode in ("phrase_hat", "word_hat"):
-        template_choices = [t for t in template_choices if t not in ("icon_accent_left", "icon_accent_top")]
-    if design_mode == "icon_only":
-        template_choices = ["club_mark"]
-
-    composition_template = random.choice(template_choices or list(COMPOSITION_TEMPLATES.keys()))
+    family_to_templates = {
+        "wordmark": ["bold_single_line"],
+        "stacked_phrase": ["stacked_two_line"],
+        "club_mark": ["club_mark"],
+        "service_mark": ["service_mark"],
+        "retro_label": ["icon_above", "stacked_two_line"],
+        "tech_status": ["icon_left", "bold_single_line"],
+        "icon_with_caption": ["icon_left", "icon_above"],
+    }
+    template_choices = [t for t in template_choices if t in family_to_templates.get(design_family, ["stacked_two_line"]) ]
+    composition_template = random.choice(template_choices or family_to_templates.get(design_family, ["stacked_two_line"]))
     font_pairing = COMPOSITION_TEMPLATES[composition_template]["font_pairing"]
 
     layout_map = {
         "bold_single_line": "single_line_center",
         "stacked_two_line": "two_line_stack",
-        "small_caps_service_mark": "single_line_center",
-        "faux_department_lockup": "two_line_stack",
-        "varsity_wordmark": "single_line_center",
-        "retro_tech_wordmark": "single_line_center",
-        "icon_accent_left": "small_icon_left",
-        "icon_accent_top": "icon_above_text",
-        "monogram_subtitle": "arched_top",
-        "club_mark": "icon_above_text" if design_mode == "icon_only" else "two_line_stack",
+        "club_mark": "two_line_stack",
+        "service_mark": "two_line_stack",
+        "icon_left": "small_icon_left",
+        "icon_above": "icon_above_text",
     }
     layout_archetype = layout_map.get(composition_template, "single_line_center")
 
     accent_icon_family = "none"
-    if design_mode in ("icon_phrase_hat", "icon_only"):
+    if design_family in ("tech_status", "icon_with_caption", "retro_label"):
         accent_icon_family = random.choice(ACCENT_ICON_FAMILIES)
 
     merch_style = random.choice([
@@ -1144,9 +1144,9 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         "wearable_score": 7, "humor_score": 6, "nostalgia_score": 7, "readability_score": 7, "novelty_score": 6,
     }
     typography_quality = max(1, min(10, p_scores["readability_score"] + (1 if design_mode != "icon_only" else -1)))
-    icon_quality = 8 if design_mode == "icon_phrase_hat" else (7 if design_mode == "icon_only" else 0)
+    icon_quality = 8 if design_mode == "icon_phrase_hat" else 0
     hierarchy = 9 if design_mode in ("phrase_hat", "word_hat") else 8
-    balance = 8 if composition_template in ("icon_accent_left", "icon_accent_top") else 9
+    balance = 8 if composition_template in ("icon_left", "icon_above") else 9
     plate_dependency = "low"
 
     merch_taste_score = int(round((
@@ -1157,13 +1157,11 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
     reroll_reason = ""
     if design_mode != "icon_only" and (p_scores["wearable_score"] < 7 or p_scores["readability_score"] < 7):
         reroll_reason = "weak_phrase"
-    if design_mode == "icon_only" and accent_icon_family in ("none", "smiley"):
-        reroll_reason = "weak_icon_only"
     if reroll_reason:
-        design_family = "text_first"
+        design_family = "stacked_phrase"
         design_mode = "phrase_hat"
         accent_icon_family = "none"
-        composition_template = random.choice(["bold_single_line", "stacked_two_line", "small_caps_service_mark"])
+        composition_template = random.choice(["bold_single_line", "stacked_two_line", "service_mark"])
         layout_archetype = layout_map[composition_template]
         phrase = pick_phrase(category_override=phrase_category)
         p_scores = phrase_scores(phrase, phrase_category)
