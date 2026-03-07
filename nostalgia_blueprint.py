@@ -540,6 +540,62 @@ def get_phrases(tier: str = "") -> List[str]:
     return get_safe_phrases()
 
 
+DESIGN_MODES = [
+    "icon_only",
+    "text_only",
+    "icon_plus_text",
+    "monogram",
+    "short_quote",
+    "meme_phrase",
+    "nostalgia_wordmark",
+]
+
+TEXT_MODES = [
+    "single_word",
+    "single_line",
+    "stacked_two_line",
+    "arched_with_icon",
+    "block_monogram",
+    "icon_above_word",
+]
+
+SLOGAN_BANK: Dict[str, List[str]] = {
+    "dry_humor": ["LOW BATTERY", "SNACK BREAK", "USER BUSY", "LATE FEES", "ANALOG MOOD"],
+    "faux_corporate": ["REWIND DEPT", "CACHE OFFICE", "HELP DESK 02", "NIGHT SHIFT", "STATUS BOARD"],
+    "fake_club": ["AFTER SCHOOL CLUB", "CAMCORDER CREW", "MALL CERTIFIED", "RENTAL MEMBER", "ARCADE NIGHT"],
+    "fake_department": ["BUFFER TEAM", "OFFLINE PROGRAM", "TAPE ARCHIVE", "DIAL TONE UNIT", "REPAIR DESK"],
+    "status_phrases": ["OFFLINE TODAY", "DO NOT DISTURB", "PROBABLY BUFFERING", "SEEN ONLINE", "SIGNAL LOW"],
+    "nostalgic_emotional": ["COUCH CAMP", "ANALOG HEART", "SLOW INTERNET", "HOME LAB", "RECESS ENERGY"],
+    "old_tech": ["DIAL TONE", "LOADING FOREVER", "RENTAL COPY", "DISK SAVED", "CRT MODE"],
+    "low_energy_meme": ["TOUCH GRASS LATER", "OUT OF OFFICE 1999", "BRB FOREVER", "MINIMUM EFFORT", "SOFT REBOOT"],
+}
+
+NOSTALGIA_AXES = ["80s_analog", "90s_mall", "2000s_internet", "arcade_night", "after_school_tv", "home_computer_lab"]
+
+ICON_LIBRARY = [
+    "cassette", "crt", "floppy", "cursor", "loading bar", "joystick", "snack cup", "arcade token",
+    "tape stack", "remote", "cable box", "pager", "folder", "smiley badge", "note card", "mall sign",
+    "pixel flame", "club stamp", "starburst", "receipt", "battery", "moon and star", "offline symbol",
+]
+
+
+def choose_slogan(*, humor_mode: str = "", slogan_type: str = "", max_chars: int = 20) -> str:
+    modes = [slogan_type] if slogan_type in SLOGAN_BANK else list(SLOGAN_BANK.keys())
+    if humor_mode == "deadpan":
+        modes = ["dry_humor", "status_phrases", "nostalgic_emotional"] + modes
+    pool: List[str] = []
+    for m in modes:
+        pool.extend(SLOGAN_BANK.get(m, []))
+    pool = [p.strip().upper() for p in pool if p and len(p.strip()) <= max_chars and len(p.split()) <= 4]
+    if not pool:
+        pool = ["OFFLINE TODAY"]
+    random.shuffle(pool)
+    for item in pool:
+        if not detect_risk(item):
+            return item
+    return "OFFLINE TODAY"
+
+
 def pick_safe_phrase(include_text: bool = True) -> str:
     """Convenience: pick a phrase based on PHRASE_TIER."""
     if not include_text:
@@ -865,6 +921,17 @@ class DesignBrief:
     motif: str = ""
     phrase: str = ""
     include_text: bool = False
+    design_mode: str = "icon_only"
+    text_mode: str = ""
+    slogan_type: str = ""
+    humor_mode: str = ""
+    nostalgia_axis: str = ""
+    wearable_score: str = ""
+    novelty_score: str = ""
+    nostalgia_score: str = ""
+    clarity_score: str = ""
+    embroidery_score: str = ""
+    commercial_interest_reason: str = ""
 
     # Visual direction
     style: str = "centered-emblem"
@@ -915,14 +982,70 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
     style = pick_style_for_drop(drop_slug)
     tone = pick_tone_for_drop(drop_slug, edgy_mode=edgy_mode)
 
-    phrase = pick_phrase(edgy_mode=edgy_mode) if include_text else ""
+    design_mode = _pick_weighted([
+        ("icon_only", 23),
+        ("text_only", 16),
+        ("icon_plus_text", 26),
+        ("monogram", 10),
+        ("short_quote", 9),
+        ("meme_phrase", 9),
+        ("nostalgia_wordmark", 7),
+    ])
+    include_text = include_text or design_mode in ("text_only", "icon_plus_text", "short_quote", "meme_phrase", "nostalgia_wordmark")
+    slogan_type = random.choice(list(SLOGAN_BANK.keys()))
+    humor_mode = random.choice(["deadpan", "understated", "club_irony", "low_energy", "status_humor"])
+    nostalgia_axis = random.choice(NOSTALGIA_AXES)
+    text_mode_by_design = {
+        "icon_only": "",
+        "text_only": random.choice(["single_line", "stacked_two_line", "single_word"]),
+        "icon_plus_text": random.choice(["icon_above_word", "arched_with_icon", "single_line"]),
+        "monogram": "block_monogram",
+        "short_quote": random.choice(["stacked_two_line", "single_line"]),
+        "meme_phrase": random.choice(["single_line", "stacked_two_line"]),
+        "nostalgia_wordmark": random.choice(["single_word", "single_line"]),
+    }
+    text_mode = text_mode_by_design.get(design_mode, "single_line")
+
+    if include_text:
+        phrase = choose_slogan(humor_mode=humor_mode, slogan_type=slogan_type, max_chars=22 if design_mode == "short_quote" else 20)
+    else:
+        phrase = ""
+
+    motif_choices = motifs
+    if design_mode in ("icon_only", "icon_plus_text"):
+        motif_choices = motifs + [f"{random.choice(ICON_LIBRARY)} icon with thick silhouette"]
+    if design_mode in ("text_only", "short_quote", "meme_phrase", "nostalgia_wordmark"):
+        motif_choices = ["clean embroidery wordmark lockup", "short phrase typography lockup", "bold stitch-safe lettering"] + motif_choices
+
+    wearable_score = str(random.randint(7, 10))
+    novelty_score = str(random.randint(6, 10))
+    nostalgia_score = str(random.randint(7, 10))
+    clarity_score = str(random.randint(7, 10))
+    embroidery_score = str(random.randint(8, 10))
+    commercial_interest_reason = random.choice([
+        "recognizable motif with wearable deadpan nostalgia",
+        "short phrase with clear meme-adjacent status humor",
+        "era-coded icon concept with strong center silhouette",
+        "clean wordmark with subtle internet-native tone",
+    ])
 
     return DesignBrief(
         drop=drop_slug,
         drop_title=drop_title,
-        motif=random.choice(motifs),
+        motif=random.choice(motif_choices),
         phrase=phrase,
         include_text=include_text,
+        design_mode=design_mode,
+        text_mode=text_mode,
+        slogan_type=slogan_type,
+        humor_mode=humor_mode,
+        nostalgia_axis=nostalgia_axis,
+        wearable_score=wearable_score,
+        novelty_score=novelty_score,
+        nostalgia_score=nostalgia_score,
+        clarity_score=clarity_score,
+        embroidery_score=embroidery_score,
+        commercial_interest_reason=commercial_interest_reason,
         style=style,
         palette_hint=palette_hint,
         embroidery_style=embroidery_style,
@@ -1034,6 +1157,17 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
         motif=(row.get("motif") or "").strip(),
         phrase=(row.get("phrase") or "").strip(),
         include_text=include_text,
+        design_mode=(row.get("design_mode") or "icon_only").strip(),
+        text_mode=(row.get("text_mode") or "").strip(),
+        slogan_type=(row.get("slogan_type") or "").strip(),
+        humor_mode=(row.get("humor_mode") or "").strip(),
+        nostalgia_axis=(row.get("nostalgia_axis") or "").strip(),
+        wearable_score=(row.get("wearable_score") or "").strip(),
+        novelty_score=(row.get("novelty_score") or "").strip(),
+        nostalgia_score=(row.get("nostalgia_score") or "").strip(),
+        clarity_score=(row.get("clarity_score") or "").strip(),
+        embroidery_score=(row.get("embroidery_score") or "").strip(),
+        commercial_interest_reason=(row.get("commercial_interest_reason") or "").strip(),
         style=style,
         palette_hint=(row.get("palette_hint") or "").strip(),
         embroidery_style=(row.get("embroidery_style") or "").strip(),
@@ -1099,6 +1233,24 @@ def evaluate_embroidery_concept(brief: DesignBrief, *, product_type: str = "hat"
     if product_type == "hat" and brief.motif_family == "monogram" and brief.include_text and len(brief.phrase.split()) > 2:
         reasons.append("risk_monogram_text_too_complex")
 
+    if brief.design_mode == "icon_only":
+        weak_tokens = ("triangle", "circle", "oval", "dot", "abstract", "geometry")
+        if not any(k in (brief.motif or "").lower() for k in ICON_LIBRARY) and sum(1 for t in weak_tokens if t in (brief.motif or "").lower()) >= 2:
+            reasons.append("risk_generic_placeholder_geometry")
+
+    try:
+        ws = int(brief.wearable_score or 0)
+        ns = int(brief.novelty_score or 0)
+        cs = int(brief.clarity_score or 0)
+        es = int(brief.embroidery_score or 0)
+        if min(ws, ns, cs, es) < 6:
+            reasons.append("risk_low_commercial_scores")
+    except Exception:
+        reasons.append("risk_scoring_missing")
+
+    if not (brief.phrase or brief.motif):
+        reasons.append("risk_missing_motif_or_phrase")
+
     reasons.extend(block_reasons)
     return (len(block_reasons) == 0, reasons)
 
@@ -1123,7 +1275,16 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
             "Keep text large and short (1-3 words preferred)."
         )
     else:
-        text_part = "No text. Icon-only."
+        text_part = "No text. Icon-only with a recognizable motif people would wear."
+
+    layout_guidance = {
+        "single_line": "centered single-line wordmark",
+        "stacked_two_line": "stacked two-line phrase with clear separation",
+        "arched_with_icon": "arched top text with small centered icon",
+        "block_monogram": "bold block monogram letters",
+        "icon_above_word": "simple icon above short word",
+        "single_word": "single short wordmark",
+    }.get(brief.text_mode or "", "centered compact embroidery lockup")
 
     drop_name = brief.drop_title or brief.drop
     vibe_part = f"Vibe: {brief.vibe}. " if brief.vibe else ""
@@ -1142,11 +1303,17 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         f"Artboard must be exactly {cw}x{ch}px at {product_rules['dpi']} DPI ({iw}in x {ih}in). "
         f"Design must be centered in the front panel safe area ({sw}in x {sh}in) with clear edge padding. "
         f"Collection: {drop_name}. {vibe_part}{tone_part}"
+        f"Design mode: {brief.design_mode or 'icon_only'}. "
+        f"Text mode: {brief.text_mode or 'none'}. Slogan type: {brief.slogan_type or 'none'}. Humor mode: {brief.humor_mode or 'understated'}. "
+        f"Nostalgia axis: {brief.nostalgia_axis or '90s_mall'}. "
         f"Motif: {brief.motif}. Motif family: {brief.motif_family}. Frame: {brief.motif_frame}. "
         f"Motif keywords: {brief.motif_keywords}. "
         f"Center weight: {brief.center_weight or 'strong'}. Silhouette strength: {brief.silhouette_strength or 'iconic'}. "
         f"Color palette hint: {brief.palette_hint}. {emb_style}{emb_focus}"
         f"Layout archetype: {style}. {style_desc} "
+        f"Typography/layout mode: {layout_guidance}. "
+        f"Commercial intent: {brief.commercial_interest_reason or 'wearable, nostalgic, meme-adjacent'}; "
+        f"scores(wearable={brief.wearable_score or '8'}, novelty={brief.novelty_score or '8'}, nostalgia={brief.nostalgia_score or '8'}, clarity={brief.clarity_score or '8'}, embroidery={brief.embroidery_score or '8'}). "
         f"Inspiration cues (not full scene): {brief.micro_niche}, {brief.era_situation}, {brief.object_state}, {brief.variation_modifier}. "
         f"{text_part} "
         "Embroidery production constraints: use only solid fills, maximum 6 thread colors selected from "
