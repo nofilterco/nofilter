@@ -1,19 +1,20 @@
 import os
 import random
 import textwrap
-from typing import List, Tuple, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from openai_image import generate_image_pil
 from nostalgia_blueprint import (
-    pick_brief,
-    build_product_prompt,
-    evaluate_embroidery_concept,
-    detect_risk,
+    EMBROIDERY_CONFIG,
+    HAT_TEMPLATE,
     MAX_THREAD_COLORS,
     STYLE_DIRECTIVES,
-    HAT_TEMPLATE,
+    build_product_prompt,
+    detect_risk,
+    evaluate_embroidery_concept,
+    pick_brief,
 )
 
 CANVAS_TEE = (4500, 5400)
@@ -21,16 +22,26 @@ CANVAS_HAT = (HAT_TEMPLATE["width_px"], HAT_TEMPLATE["height_px"])
 HAT_SAFE_AREA = (1000, 550)
 
 STRICT_EMBROIDERY_STYLE_RULES = (
-    "flat vector icon, solid color fills, bold embroidery outlines, minimum 4px strokes, "
-    "no texture, no grain, no shadow, no gradients, no shading, no distressed or vintage effects, "
-    "embroidery patch style graphic, badge emblem, bold vector icon"
+    "direct embroidery graphic for hat front, clean vector emblem, flat embroidery-ready icon, "
+    "satin-stitch-friendly shapes, fill-stitch-friendly blocks, thick geometric silhouette, transparent background, "
+    "no patch backing, no label plate, no sticker layout, no faux thread texture, no grain, no shadow, no shading"
 )
+
+
+def _hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
+    h = (hex_color or "").strip().lstrip("#")
+    if len(h) != 6:
+        return (0, 0, 0)
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _closest_thread_color(rgb: Tuple[int, int, int], palette: List[Tuple[int, int, int]]) -> Tuple[int, int, int]:
+    return min(palette, key=lambda p: (p[0] - rgb[0]) ** 2 + (p[1] - rgb[1]) ** 2 + (p[2] - rgb[2]) ** 2)
 
 
 def _load_font(font_path: Optional[str], size: int) -> ImageFont.FreeTypeFont:
     if font_path and os.path.exists(font_path):
         return ImageFont.truetype(font_path, size=size)
-
     candidates = [
         r"C:\Windows\Fonts\arialbd.ttf",
         r"C:\Windows\Fonts\impact.ttf",
@@ -39,7 +50,6 @@ def _load_font(font_path: Optional[str], size: int) -> ImageFont.FreeTypeFont:
     for p in candidates:
         if os.path.exists(p):
             return ImageFont.truetype(p, size=size)
-
     return ImageFont.load_default()
 
 
@@ -53,26 +63,15 @@ def _wrap_lines(text: str, width: int = 18) -> List[str]:
     return lines if lines else [""]
 
 
-def _center_text(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    font: ImageFont.ImageFont,
-    box: Tuple[int, int, int, int],
-    line_spacing: float = 1.05,
-) -> None:
+def _center_text(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, box: Tuple[int, int, int, int], line_spacing: float = 1.05) -> None:
     x0, y0, x1, y1 = box
-
     lines = _wrap_lines(text, width=18)
-    widths: List[int] = []
     heights: List[int] = []
     for line in lines:
         bbox = draw.textbbox((0, 0), line, font=font)
-        widths.append(bbox[2] - bbox[0])
         heights.append(bbox[3] - bbox[1])
-
     total_h = int(sum(heights) * line_spacing)
     y = y0 + ((y1 - y0) - total_h) // 2
-
     for i, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
         w = bbox[2] - bbox[0]
@@ -82,66 +81,57 @@ def _center_text(
         y += int(h * line_spacing)
 
 
-def quantize_rgba(img: Image.Image, colors: int = MAX_THREAD_COLORS) -> Image.Image:
+def _palette_restricted_quantize(img: Image.Image, *, preferred_colors: int = 5, hard_max: int = MAX_THREAD_COLORS) -> Tuple[Image.Image, int, int, List[str]]:
     img = img.convert("RGBA")
     alpha = img.getchannel("A")
+    raw_colors = len((img.convert("RGB")).getcolors(maxcolors=1_000_000) or [])
+
+    approved = [_hex_to_rgb(c) for c in EMBROIDERY_CONFIG.allowed_thread_palette]
+    target = max(2, min(hard_max, preferred_colors))
 
     rgb = Image.new("RGB", img.size, (255, 255, 255))
     rgb.paste(img.convert("RGB"), mask=alpha)
+    paletted = rgb.convert("P", palette=Image.Palette.ADAPTIVE, colors=target, dither=Image.Dither.NONE)
+    sampled = [paletted.palette.palette[i:i + 3] for i in range(0, min(target * 3, len(paletted.palette.palette)), 3)]
+    sampled_rgb = [tuple(s) for s in sampled if len(s) == 3]
+    mapped = [_closest_thread_color(c, approved) for c in sampled_rgb] or approved[:target]
 
-    rgb = ImageOps.autocontrast(rgb, cutoff=1)
-    rgb = rgb.filter(ImageFilter.MedianFilter(size=3))
+    mapped_img = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    src = paletted.convert("RGB")
+    spx = src.load()
+    dpx = mapped_img.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            if alpha.getpixel((x, y)) <= 10:
+                continue
+            pix = spx[x, y]
+            dpx[x, y] = _closest_thread_color(pix, mapped) + (255,)
 
-    pal = rgb.convert(
-        "P",
-        palette=Image.Palette.ADAPTIVE,
-        colors=max(2, int(colors)),
-        dither=Image.Dither.NONE,
-    )
-    rgb2 = pal.convert("RGB")
-
-    out = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    out.paste(rgb2, mask=alpha)
-
-    if os.getenv("EMBROIDERY_SNAP", "1").strip().lower() in ("1", "true", "yes", "y", "on"):
-        w, h = out.size
-        scale = float(os.getenv("EMBROIDERY_SNAP_SCALE", "0.6"))
-        try:
-            nw, nh = max(256, int(w * scale)), max(256, int(h * scale))
-            out = out.resize((nw, nh), resample=Image.Resampling.NEAREST).resize((w, h), resample=Image.Resampling.NEAREST)
-        except Exception:
-            pass
-
-    return out
+    final_count = len((mapped_img.convert("RGB")).getcolors(maxcolors=1_000_000) or [])
+    palette_used = ["#%02x%02x%02x" % c for c in sorted(set(mapped))[:hard_max]]
+    return mapped_img, raw_colors, final_count, palette_used
 
 
 def make_text_only(phrase: str, font_path: str) -> Image.Image:
     img = Image.new("RGBA", CANVAS_TEE, (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
     phrase = (phrase or "").strip() or "NO FILTER"
     phrase = phrase.upper()
-
     size = 600
     box = (400, 1400, CANVAS_TEE[0] - 400, CANVAS_TEE[1] - 1800)
-
     while size > 120:
         font = _load_font(font_path, size)
         bbox = draw.multiline_textbbox((0, 0), phrase, font=font, spacing=20, align="center")
-        w = bbox[2] - bbox[0]
-        if w <= (box[2] - box[0]):
+        if (bbox[2] - bbox[0]) <= (box[2] - box[0]):
             break
         size -= 20
-
-    font = _load_font(font_path, size)
-    _center_text(draw, phrase, font, box)
+    _center_text(draw, phrase, _load_font(font_path, size), box)
     return img
 
 
 def make_ai_art(prompt: str, *, canvas: Tuple[int, int]) -> Image.Image:
     base = Image.new("RGBA", canvas, (0, 0, 0, 0))
     art = generate_image_pil(prompt).convert("RGBA")
-
     art = ImageOps.contain(art, (int(canvas[0] * 0.86), int(canvas[1] * 0.86)))
     x = (canvas[0] - art.size[0]) // 2
     y = (canvas[1] - art.size[1]) // 2
@@ -149,42 +139,76 @@ def make_ai_art(prompt: str, *, canvas: Tuple[int, int]) -> Image.Image:
     return base
 
 
-def _scale_hat_to_safe_area(img: Image.Image) -> Image.Image:
-    """Scale motif to embroidery-safe proportions and keep transparent background."""
-    img = img.convert("RGBA")
-    alpha = img.getchannel("A")
-    bbox = alpha.getbbox()
-    if not bbox:
-        return img
-
-    motif = img.crop(bbox)
-    mw, mh = motif.size
-    if mw <= 0 or mh <= 0:
-        return img
-
-    target_width = int(CANVAS_HAT[0] * 0.8)  # 75–85% target range
-    min_safe_height = int(HAT_SAFE_AREA[1] * 0.60)
-
-    scale_w = target_width / float(mw)
-    scale_h = min_safe_height / float(mh)
-    scale = max(scale_w, scale_h)
-
-    max_w = int(HAT_SAFE_AREA[0])
-    max_h = int(HAT_SAFE_AREA[1])
-    scale = min(scale, max_w / float(mw), max_h / float(mh))
-    if scale <= 0:
-        return img
-
-    new_size = (max(1, int(mw * scale)), max(1, int(mh * scale)))
-    motif = motif.resize(new_size, resample=Image.Resampling.LANCZOS)
-
-    out = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
+def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dict[str, str]]:
+    canvas = Image.new("RGBA", CANVAS_HAT, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
     safe_x0 = (CANVAS_HAT[0] - HAT_SAFE_AREA[0]) // 2
     safe_y0 = (CANVAS_HAT[1] - HAT_SAFE_AREA[1]) // 2
-    x = safe_x0 + (HAT_SAFE_AREA[0] - motif.size[0]) // 2
-    y = safe_y0 + (HAT_SAFE_AREA[1] - motif.size[1]) // 2
-    out.paste(motif, (x, y), mask=motif.getchannel("A"))
-    return out
+    safe_x1 = safe_x0 + HAT_SAFE_AREA[0]
+    safe_y1 = safe_y0 + HAT_SAFE_AREA[1]
+
+    seed = abs(hash(f"{brief.drop}|{brief.motif}|{brief.phrase}|{resolved_style}"))
+    rng = random.Random(seed)
+
+    fill_pct = rng.uniform(0.72, 0.84)
+    motif_w = int(HAT_SAFE_AREA[0] * fill_pct)
+    motif_h = int(HAT_SAFE_AREA[1] * rng.uniform(0.6, 0.82))
+    cx = (safe_x0 + safe_x1) // 2
+    cy = (safe_y0 + safe_y1) // 2
+    bbox = (cx - motif_w // 2, cy - motif_h // 2, cx + motif_w // 2, cy + motif_h // 2)
+
+    palette = [_hex_to_rgb(c) for c in EMBROIDERY_CONFIG.allowed_thread_palette]
+    chosen = rng.sample(palette, k=min(5, len(palette)))
+    bg, primary, accent, accent2, accent3 = (chosen + chosen[:5])[:5]
+    stroke = max(6, int(CANVAS_HAT[0] * 0.005))
+
+    shape_mode = resolved_style
+    if shape_mode in ("text-lockup", "wordmark-icon") and brief.phrase:
+        shape_mode = "direct-front-graphic"
+
+    x0, y0, x1, y1 = bbox
+    if shape_mode in ("centered-emblem", "direct-front-graphic", "bold-icon-block"):
+        draw.ellipse(bbox, fill=primary + (255,), outline=accent + (255,), width=stroke)
+        in_pad = int(motif_w * 0.22)
+        draw.polygon([(cx, y0 + in_pad), (x1 - in_pad, y1 - in_pad), (x0 + in_pad, y1 - in_pad)], fill=accent2 + (255,))
+    elif shape_mode in ("geometric-monogram", "monoline-symbol"):
+        draw.rounded_rectangle(bbox, radius=int(motif_h * 0.18), fill=primary + (255,), outline=accent + (255,), width=stroke)
+        draw.line([(x0 + motif_w * 0.25, y0 + motif_h * 0.25), (cx, y1 - motif_h * 0.2), (x1 - motif_w * 0.25, y0 + motif_h * 0.25)], fill=accent2 + (255,), width=stroke)
+    elif shape_mode == "simplified-mascot-icon":
+        head = (cx - motif_w // 4, y0 + motif_h // 6, cx + motif_w // 4, cy + motif_h // 8)
+        body = (cx - motif_w // 3, cy - motif_h // 16, cx + motif_w // 3, y1 - motif_h // 8)
+        draw.ellipse(head, fill=primary + (255,), outline=accent + (255,), width=stroke)
+        draw.rounded_rectangle(body, radius=int(motif_h * 0.1), fill=accent2 + (255,), outline=accent + (255,), width=stroke)
+        draw.rectangle((cx - stroke, cy - stroke, cx + stroke, y1 - motif_h // 5), fill=accent3 + (255,))
+    else:
+        draw.polygon([(cx, y0), (x1, cy), (cx, y1), (x0, cy)], fill=primary + (255,), outline=accent + (255,), width=stroke)
+        draw.ellipse((cx - motif_w // 5, cy - motif_h // 5, cx + motif_w // 5, cy + motif_h // 5), fill=accent2 + (255,))
+
+    # optional motif-specific frame only
+    frame_mode = "none"
+    if (brief.motif_frame or "").lower() in ("circle", "shield", "hex") and rng.random() < 0.25:
+        frame_mode = "motif_specific"
+        pad = stroke * 2
+        draw.rounded_rectangle((x0 - pad, y0 - pad, x1 + pad, y1 + pad), radius=int(motif_h * 0.2), outline=accent3 + (255,), width=stroke)
+
+    if brief.include_text and brief.phrase and len(brief.phrase) <= 14:
+        font = _load_font(os.path.join("assets", "fonts", "Montserrat-Bold.ttf"), max(38, int(motif_h * 0.12)))
+        tb = draw.textbbox((0, 0), brief.phrase.upper(), font=font)
+        tw = tb[2] - tb[0]
+        tx = cx - tw // 2
+        ty = min(safe_y1 - (tb[3] - tb[1]) - 4, y1 + 8)
+        draw.text((tx, ty), brief.phrase.upper(), font=font, fill=accent + (255,))
+
+    safe_fill = motif_w / float(HAT_SAFE_AREA[0])
+    meta = {
+        "composition_mode": "single_centered_emblem",
+        "background_mode": "transparent",
+        "frame_mode": frame_mode,
+        "safe_area_fill_pct": f"{safe_fill:.3f}",
+        "motif_bbox": f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}",
+        "vector_mode_used": "true",
+    }
+    return canvas, meta
 
 
 def build_design(
@@ -203,81 +227,64 @@ def build_design(
 ) -> Union[Image.Image, Tuple[Image.Image, str]]:
     style_in = (style or "ai_art").strip().lower()
     product_type = (product_type or "hat").strip().lower()
-
     for t in (title, phrase, niche):
         risk = detect_risk(t or "")
         if risk:
             raise ValueError(f"Blocked by safety gate: {risk}")
 
     if product_type == "hat":
-        generate_mode = (os.getenv("GENERATE_MODE") or "raster").strip().lower()
-        if generate_mode not in ("raster", "png"):
-            # SVG-first path is intentionally gated until fully wired.
-            generate_mode = "raster"
-
         if include_text is None:
             include_text = False
-
         brief = pick_brief(drop=drop, include_text=bool(include_text))
-
-        # Deterministic context (Option B) overrides brief fields
         if brief_context and isinstance(brief_context, dict):
             for k, v in brief_context.items():
                 if hasattr(brief, k) and v not in (None, ""):
                     setattr(brief, k, str(v))
+        brief.phrase = phrase if include_text and phrase else (brief.phrase if include_text else "")
 
-        # phrase handling for include_text
-        if include_text:
-            if phrase:
-                brief.phrase = phrase
-            else:
-                if not getattr(brief, "phrase", ""):
-                    brief.phrase = "NO FILTER"
-        else:
-            brief.phrase = ""
-
-        # resolve style key (archetype)
-        style_key = style_in if style_in not in ("ai_art", "", None) else ""
-        if style_key and style_key in STYLE_DIRECTIVES:
-            resolved_style = style_key
-        else:
-            resolved_style = getattr(brief, "style", "icon-minimal")
-            if resolved_style not in STYLE_DIRECTIVES:
-                resolved_style = "icon-minimal"
-
+        resolved_style = style_in if style_in in STYLE_DIRECTIVES else getattr(brief, "style", "centered-emblem")
+        if resolved_style not in STYLE_DIRECTIVES:
+            resolved_style = "centered-emblem"
         brief.style = resolved_style
 
         if validate_concept:
-            concept_ok, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
-            block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
-            if block_reasons:
-                raise ValueError(f"Embroidery concept rejected: {','.join(block_reasons)}")
+            _, concept_reasons = evaluate_embroidery_concept(brief, product_type=product_type)
+            blocked = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
+            if blocked:
+                raise ValueError(f"Embroidery concept rejected: {','.join(blocked)}")
 
+        vector_first = (os.getenv("HAT_VECTOR_MODE", "1").strip().lower() in ("1", "true", "yes", "on"))
         prompt = build_product_prompt(brief, product_type=product_type)
         prompt = f"{prompt} Strict style rules: {STRICT_EMBROIDERY_STYLE_RULES}."
-        img = make_ai_art(prompt, canvas=CANVAS_HAT)
-        img = _scale_hat_to_safe_area(img)
-        img = img.convert("P", palette=Image.ADAPTIVE, colors=MAX_THREAD_COLORS).convert("RGBA")
-        img = quantize_rgba(img, colors=MAX_THREAD_COLORS)
-        try:
-            img.info["dpi"] = (HAT_TEMPLATE["dpi"], HAT_TEMPLATE["dpi"])
-        except Exception:
-            pass
+
+        if vector_first:
+            img, meta = _render_vector_hat_art(brief, resolved_style)
+        else:
+            img = make_ai_art(prompt, canvas=CANVAS_HAT)
+            meta = {
+                "composition_mode": "single_centered_emblem",
+                "background_mode": "transparent",
+                "frame_mode": "none",
+                "vector_mode_used": "false",
+                "safe_area_fill_pct": "0.800",
+                "motif_bbox": "",
+            }
+
+        img, raw_count, final_count, palette_used = _palette_restricted_quantize(img, preferred_colors=5, hard_max=MAX_THREAD_COLORS)
+        img.info.update(meta)
+        img.info["raw_color_count"] = str(raw_count)
+        img.info["final_color_count"] = str(final_count)
+        img.info["palette_used"] = ",".join(palette_used)
+        img.info["dpi"] = (HAT_TEMPLATE["dpi"], HAT_TEMPLATE["dpi"])
 
         if return_prompt:
             return img, prompt
         return img
 
-    # legacy tee path
-    fonts = [
-        os.path.join("assets", "fonts", "Anton-Regular.ttf"),
-        os.path.join("assets", "fonts", "Montserrat-Bold.ttf"),
-    ]
+    fonts = [os.path.join("assets", "fonts", "Anton-Regular.ttf"), os.path.join("assets", "fonts", "Montserrat-Bold.ttf")]
     font_path = random.choice(fonts)
-
     if style_in == "mix":
         style_in = random.choices(["text", "ai_art"], weights=[25, 75])[0]
-
     if style_in == "text":
         return make_text_only(phrase, font_path)
 
