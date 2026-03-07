@@ -148,6 +148,15 @@ def save_queue(rows: List[Dict[str, str]]) -> None:
         "quality_reason",
         "quality_json",
         "detected_color_count",
+        "raw_color_count",
+        "final_color_count",
+        "palette_used",
+        "composition_mode",
+        "background_mode",
+        "frame_mode",
+        "safe_area_fill_pct",
+        "motif_bbox",
+        "vector_mode_used",
         "pipeline_stage",
         "concept_reasons",
         "error_stage",
@@ -356,6 +365,15 @@ def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
                 "concept_risk": "",
                 "quality_reason": "",
                 "quality_json": "",
+                "raw_color_count": "",
+                "final_color_count": "",
+                "palette_used": "",
+                "composition_mode": "",
+                "background_mode": "",
+                "frame_mode": "",
+                "safe_area_fill_pct": "",
+                "motif_bbox": "",
+                "vector_mode_used": "",
                 "pipeline_stage": "SEEDED",
                 "concept_reasons": "",
                 "error_stage": "",
@@ -530,7 +548,7 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
             continue
 
         _set_stage(r, "QUALITY_CHECK")
-        ok, q_reason, q_json = pass_fail(img)
+        ok, q_reason, q_json = pass_fail(local_path)
         prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
         prior_reason = (r.get("quality_reason") or "").strip()
         if ok:
@@ -544,6 +562,15 @@ def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
         except Exception:
             r["quality_json"] = str(q_json)
         r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
+        r["raw_color_count"] = str((q_json or {}).get("raw_color_count", img.info.get("raw_color_count", "")))
+        r["final_color_count"] = str((q_json or {}).get("final_color_count", img.info.get("final_color_count", "")))
+        r["palette_used"] = ",".join((q_json or {}).get("palette_used", [])) if isinstance((q_json or {}).get("palette_used"), list) else str((q_json or {}).get("palette_used", img.info.get("palette_used", "")))
+        r["composition_mode"] = str(img.info.get("composition_mode", ""))
+        r["background_mode"] = str(img.info.get("background_mode", ""))
+        r["frame_mode"] = str(img.info.get("frame_mode", ""))
+        r["safe_area_fill_pct"] = str(img.info.get("safe_area_fill_pct", ""))
+        r["motif_bbox"] = str((q_json or {}).get("motif_bbox", img.info.get("motif_bbox", "")))
+        r["vector_mode_used"] = str(img.info.get("vector_mode_used", ""))
 
         if not ok:
             r["status"] = "HOLD_QUALITY"
@@ -761,7 +788,7 @@ def process_one(*, auto_seed: bool = True) -> bool:
         return False
 
     _set_stage(r, "QUALITY_CHECK")
-    ok, q_reason, q_json = pass_fail(img)
+    ok, q_reason, q_json = pass_fail(local_path)
     if ok:
         r["quality_status"] = "PASS"
         r["quality_reason"] = ""
@@ -773,6 +800,15 @@ def process_one(*, auto_seed: bool = True) -> bool:
     except Exception:
         r["quality_json"] = str(q_json)
     r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
+    r["raw_color_count"] = str((q_json or {}).get("raw_color_count", img.info.get("raw_color_count", "")))
+    r["final_color_count"] = str((q_json or {}).get("final_color_count", img.info.get("final_color_count", "")))
+    r["palette_used"] = ",".join((q_json or {}).get("palette_used", [])) if isinstance((q_json or {}).get("palette_used"), list) else str((q_json or {}).get("palette_used", img.info.get("palette_used", "")))
+    r["composition_mode"] = str(img.info.get("composition_mode", ""))
+    r["background_mode"] = str(img.info.get("background_mode", ""))
+    r["frame_mode"] = str(img.info.get("frame_mode", ""))
+    r["safe_area_fill_pct"] = str(img.info.get("safe_area_fill_pct", ""))
+    r["motif_bbox"] = str((q_json or {}).get("motif_bbox", img.info.get("motif_bbox", "")))
+    r["vector_mode_used"] = str(img.info.get("vector_mode_used", ""))
     if not ok:
         r["status"] = "HOLD_QUALITY"
         _set_stage(r, "HOLD_QUALITY", r["quality_reason"])

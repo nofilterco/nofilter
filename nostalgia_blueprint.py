@@ -147,32 +147,14 @@ HAT_TEMPLATE = {
 # Visual archetypes / styles (expanded)
 # =========================
 STYLE_DIRECTIVES: Dict[str, str] = {
-    # Core
-    "icon-minimal": "Single centered icon, bold silhouette, confident negative space. Clean and timeless.",
-    "badge-round": "Circular badge patch with thick border ring; vintage mall-brand energy.",
-    "badge-rect": "Rounded-rectangle badge patch with a simple border; vintage apparel label feel.",
-    "micro-pattern": "Small repeating pattern tile (2–3 repeats) with chunky shapes; subtle and embroidery-simple.",
-    "stripe-emblem": "Horizontal stripe band with a small emblem centered; athletic retro vibe.",
-    "pixel-icon": "Pixel-art icon with crisp blocky squares; arcade-adjacent minimalism.",
-    "line-wave": "Simple single-stroke waveform/line motif; thick line only; calm analog tech aesthetic.",
-    "text-lockup": "Short deadpan phrase with a tiny icon; bold block letters only.",
-    "mall-brand": "Minimal corporate-style emblem as if from a forgotten 1996 mall brand; clean, understated.",
-    "arcade-token": "Coin-like emblem with simple geometry; subtle gaming nostalgia without references.",
-    "tech-label": "Clean hardware sticker aesthetic; understated industrial feel; no tiny text.",
-
-    # NEW V4 premium variety
-    "sticker-sheet": "Cluster of 3–5 small nostalgic icons arranged like a 90s sticker sheet, evenly spaced, thick outlines.",
-    "object-stack": "Stack of nostalgic objects in a slightly messy arrangement; simplified, embroidery-safe.",
-    "label-tag": "Minimal rectangular clothing tag aesthetic with small bold phrase and tiny icon.",
-    "mall-signage": "Mall directory signage aesthetic; clean, understated, bold sans-serif.",
-    "inventory-stamp": "Industrial stamped label style; bold block lettering; clean minimal icon.",
-    "diary-doodle": "Notebook margin doodle style; thick single-line embroidery; playful but minimal.",
-    "corporate-90s": "Generic 90s corporate logo parody aesthetic; subtle and understated (no brands).",
-    "burnout-minimal": "Extremely minimal single icon with tiny deadpan phrase; lots of negative space.",
-    "adulting-badge": "Sarcastic merit badge style patch; clean borders; simple icon + short phrase.",
-    "tech-error-core": "Simplified UI error window aesthetic; embroidery-safe blocks; minimal icon + short phrase.",
-    "sleepover-core": "Minimal floor scene cluster (snacks/remote/tape) as simple stitched shapes; not photorealistic.",
-    "garage-box-core": "Minimal storage box with nostalgic objects partially visible; simplified stitched forms.",
+    "centered-emblem": "Single centered emblem with strong silhouette and flat fills for direct hat-front embroidery.",
+    "monoline-symbol": "Single symbol using thick monoline geometry and minimal interior detail.",
+    "bold-icon-block": "Chunky icon block with clear negative space and stitch-safe outlines.",
+    "geometric-monogram": "Simple geometric monogram with thick strokes and no tiny counters.",
+    "simplified-mascot-icon": "Minimal mascot-like icon built from basic shapes, no texture, no scene.",
+    "direct-front-graphic": "Single compact front graphic with centered weight and transparent background.",
+    "wordmark-icon": "Short bold wordmark paired with one simple icon, embroidery-safe spacing.",
+    "framed-motif": "Optional motif-specific frame only when intrinsic to the motif concept.",
 }
 
 STYLE_CHOICES = list(STYLE_DIRECTIVES.keys())
@@ -263,49 +245,37 @@ TEXTURE_CUES = [
     "creased corner (stitch-safe)",
     "slight crack line (stitch-safe)",
     "worn edges (stitch-safe)",
-    "sticker residue (no brands, stitch-safe)",
+    "adhesive residue (no brands, stitch-safe)",
 ]
 
 VARIATION_MODIFIERS = [
+    "centered object",
     "top view",
     "side view",
-    "isometric angle",
-    "angled pile",
-    "neatly arranged",
-    "messy arrangement",
-    "centered object",
-    "objects spilling outward",
-    "contained inside a circular badge",
-    "contained inside a rounded rectangle label",
+    "single compact mark",
+    "simplified geometric build",
+    "thick-outline variant",
 ]
 
 TEXT_PAIRING_CONTEXTS = [
-    "hardware sticker",
-    "mall brand patch",
-    "equipment label",
-    "warning label",
-    "inventory sticker",
-    "school supply label",
+    "front embroidery lockup",
+    "clean vector lockup",
+    "compact emblem lockup",
 ]
 
 MOTIF_FAMILIES = [
-    "badge",
-    "patch",
+    "single-emblem",
     "symbol",
-    "mascot-icon",
-    "framed-emblem",
-    "retro-label",
+    "simplified-mascot",
     "monogram",
-    "center-icon-system",
+    "direct-front-graphic",
 ]
 
 MOTIF_FRAMES = [
-    "circular seal",
-    "rounded rectangle patch",
-    "shield emblem",
-    "ticket stub frame",
-    "capsule label",
-    "arched crest",
+    "none",
+    "circle",
+    "shield",
+    "hex",
 ]
 
 PRODUCT_RULES = {
@@ -448,7 +418,7 @@ PLAYGROUND_SUPER_MOTIFS = [
     "hopscotch grid icon (generic)",
     "playground slide outline icon",
     "smiley doodle (original, minimal)",
-    "sticker-style lightning bolt (original shape)",
+    "clean lightning bolt icon (original shape)",
 ]
 
 INTERNET_SUPER_MOTIFS = [
@@ -478,7 +448,7 @@ MALL_SUPER_MOTIFS = [
     "shopping bag silhouette (generic)",
     "mall directory sign silhouette (generic)",
     "pretzel/snack icon (generic, minimal)",
-    "sticker-style OPEN LATE badge (generic typography)",
+    "OPEN LATE emblem (generic typography)",
     "roller rink disco swirl (abstract)",
     "sparkly starburst (4-point sparkle)",
 ]
@@ -489,8 +459,8 @@ Y2K_SUPER_MOTIFS = [
     "flip phone silhouette (generic)",
     "charging cable coil (generic)",
     "sparkle icon (simple 4-point)",
-    "chrome-style oval badge (flat, no gradients)",
-    "bubble text badge (original typography)",
+    "oval emblem (flat, no gradients)",
+    "bubble text emblem (original typography)",
     "USB stick silhouette (generic)",
     "desktop tower side panel (generic)",
     "pixel flame icon (original grid design)",
@@ -598,12 +568,11 @@ def get_embroidery_styles() -> List[str]:
     if y:
         return y
     return [
+        "flat direct embroidery",
         "satin stitch bold fill",
-        "puff embroidery (3D raised)",
-        "flat minimal line stitch",
-        "small chest logo scale",
-        "side panel micro icon",
-        "front-center bold patch",
+        "fill-stitch geometric blocks",
+        "front-center emblem scale",
+        "compact icon mark",
     ]
 
 
@@ -623,7 +592,7 @@ def _default_drops() -> List[Dict[str, Any]]:
             "slug": "playground-core",
             "limited": 500,
             "vibe": "recess nostalgia / carefree",
-            "embroidery_focus": "patch style badge",
+            "embroidery_focus": "single centered direct embroidery emblem",
             "motifs": PLAYGROUND_SUPER_MOTIFS,
         },
         {
@@ -655,7 +624,7 @@ def _default_drops() -> List[Dict[str, Any]]:
             "slug": "y2k-minimal",
             "limited": 350,
             "vibe": "futuristic digital optimism (clean)",
-            "embroidery_focus": "metallic thread option",
+            "embroidery_focus": "clean geometric thread blocks",
             "motifs": Y2K_SUPER_MOTIFS,
         },
     ]
@@ -738,63 +707,12 @@ def build_drop_tags(drop_slug_or_name: str) -> List[str]:
 # Drop personality profiles (style/tone weighting)
 # =========================
 DROP_STYLE_WEIGHTS: Dict[str, List[Tuple[str, int]]] = {
-    "analog-era": [
-        ("icon-minimal", 12),
-        ("inventory-stamp", 10),
-        ("corporate-90s", 8),
-        ("object-stack", 7),
-        ("tech-label", 6),
-        ("label-tag", 5),
-        ("badge-rect", 5),
-        ("badge-round", 4),
-        ("micro-pattern", 3),
-    ],
-    "playground-core": [
-        ("sticker-sheet", 10),
-        ("diary-doodle", 9),
-        ("adulting-badge", 8),
-        ("badge-round", 7),
-        ("badge-rect", 6),
-        ("micro-pattern", 5),
-        ("sleepover-core", 4),
-        ("icon-minimal", 4),
-    ],
-    "early-internet": [
-        ("tech-error-core", 10),
-        ("pixel-icon", 9),
-        ("burnout-minimal", 8),
-        ("tech-label", 7),
-        ("label-tag", 6),
-        ("line-wave", 6),
-        ("badge-rect", 5),
-        ("icon-minimal", 4),
-    ],
-    "mall-culture": [
-        ("mall-signage", 9),
-        ("badge-round", 9),
-        ("arcade-token", 8),
-        ("sticker-sheet", 7),
-        ("adulting-badge", 6),
-        ("stripe-emblem", 5),
-        ("object-stack", 4),
-    ],
-    "after-school-tv": [
-        ("icon-minimal", 10),
-        ("badge-round", 7),
-        ("sticker-sheet", 6),
-        ("sleepover-core", 6),
-        ("label-tag", 5),
-        ("diary-doodle", 4),
-    ],
-    "y2k-minimal": [
-        ("tech-label", 10),
-        ("corporate-90s", 8),
-        ("icon-minimal", 8),
-        ("stripe-emblem", 7),
-        ("label-tag", 6),
-        ("badge-rect", 5),
-        ("micro-pattern", 4),
-    ],
+    "analog-era": [("centered-emblem", 12), ("bold-icon-block", 10), ("monoline-symbol", 8), ("geometric-monogram", 6)],
+    "playground-core": [("simplified-mascot-icon", 11), ("centered-emblem", 10), ("bold-icon-block", 8), ("direct-front-graphic", 6)],
+    "early-internet": [("monoline-symbol", 11), ("geometric-monogram", 9), ("direct-front-graphic", 8), ("centered-emblem", 7)],
+    "mall-culture": [("bold-icon-block", 10), ("centered-emblem", 9), ("framed-motif", 5), ("direct-front-graphic", 7)],
+    "after-school-tv": [("centered-emblem", 11), ("simplified-mascot-icon", 8), ("direct-front-graphic", 8), ("monoline-symbol", 6)],
+    "y2k-minimal": [("geometric-monogram", 10), ("monoline-symbol", 9), ("centered-emblem", 8), ("bold-icon-block", 6)],
 }
 
 DROP_TONE_WEIGHTS: Dict[str, List[Tuple[str, int]]] = {
@@ -949,7 +867,7 @@ class DesignBrief:
     include_text: bool = False
 
     # Visual direction
-    style: str = "icon-minimal"
+    style: str = "centered-emblem"
     palette_hint: str = ""
     embroidery_style: str = ""
     embroidery_focus: str = ""
@@ -986,7 +904,7 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
 
     motifs = get_drop_motifs(drop_slug) or get_drop_motifs(drop_title)
     if not motifs:
-        motifs = ["memphis geometric badge (triangles, squiggles, dots)"]
+        motifs = ["memphis geometric emblem (triangles, squiggles, dots)"]
 
     palette_hint = random.choice(get_palette_hints()) if get_palette_hints() else ""
     emb_styles = get_embroidery_styles()
@@ -1020,13 +938,13 @@ def _pick_brief_raw(drop: Optional[str] = None, include_text: bool = False) -> D
         motif_frame=random.choice(MOTIF_FRAMES),
         motif_keywords=", ".join(random.sample([
             "bold silhouette",
-            "thick border",
+            "thick geometric stroke",
             "flat fill",
-            "embroidered patch",
+            "single emblem",
             "centered weight",
-            "retro insignia",
-            "limited drop",
             "clean negative space",
+            "direct embroidery",
+            "vector clean edges",
         ], 3)),
         center_weight=random.choice(["strong", "strong", "medium"]),
         silhouette_strength=random.choice(["iconic", "iconic", "solid"]),
@@ -1106,9 +1024,9 @@ def brief_from_row(row: Dict[str, Any], *, include_text: bool) -> DesignBrief:
     drop_meta = get_drop_meta(drop) if drop else {}
     drop_title = (row.get("drop_title") or drop_meta.get("title") or "").strip()
 
-    style = (row.get("style") or "icon-minimal").strip()
+    style = (row.get("style") or "centered-emblem").strip()
     if style not in STYLE_DIRECTIVES:
-        style = "icon-minimal"
+        style = "centered-emblem"
 
     return DesignBrief(
         drop=drop or str(drop_meta.get("slug") or ""),
@@ -1194,14 +1112,14 @@ def build_hat_prompt(brief: DesignBrief) -> str:
 
 def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> str:
     ptype = (product_type or "hat").strip().lower()
-    style = brief.style if brief.style in STYLE_DIRECTIVES else "icon-minimal"
+    style = brief.style if brief.style in STYLE_DIRECTIVES else "centered-emblem"
     style_desc = STYLE_DIRECTIVES.get(style, "")
 
     if brief.include_text and brief.phrase:
         idx = abs(hash((brief.drop, brief.phrase, brief.motif))) % max(1, len(TEXT_PAIRING_CONTEXTS))
         label_context = TEXT_PAIRING_CONTEXTS[idx]
         text_part = (
-            f'Include the exact text "{brief.phrase}" in bold, clean block lettering as a {label_context}. '
+            f'Include the exact text "{brief.phrase}" in bold, clean block lettering as a {label_context} for direct front embroidery. '
             "Keep text large and short (1-3 words preferred)."
         )
     else:
@@ -1236,8 +1154,8 @@ def build_product_prompt(brief: DesignBrief, *, product_type: str = "hat") -> st
         "No gradients. No distressed texture. No photographic imagery. "
         "Strict style rules: flat vector icon, solid color fills, bold embroidery outlines, minimum 4px strokes, "
         "no texture, no grain, no shadow, no gradients, no shading, no distressed or vintage effects, "
-        "embroidery patch style graphic, badge emblem, bold vector icon, not illustration. "
+        "direct embroidery front graphic, clean vector emblem, bold icon geometry, not patch illustration. "
         "Avoid transparent holes in center forms when possible. Avoid thin lines and tiny detail. "
-        "Use bold iconic center-weighted shapes, thick strokes, and clean borders suitable for stitch-out. "
+        "Use bold iconic center-weighted shapes, thick strokes, and clean stitch-safe geometry. "
         "Single centered composition only; no background scene, no watermark, no signature."
     )
