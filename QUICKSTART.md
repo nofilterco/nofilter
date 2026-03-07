@@ -16,15 +16,18 @@ source .venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-Create `.env` and set:
+Create `.env` and set at minimum:
 
-- `OPENAI_API_KEY`
-- `PRINTIFY_TOKEN`
-- `PRINTIFY_SHOP_ID`
-- `R2_ACCOUNT_ID`
-- `R2_ACCESS_KEY`
-- `R2_SECRET_KEY`
-- `R2_BUCKET`
+- `OPENAI_API_KEY` (required for **Generate**)
+- `PRINTIFY_TOKEN` (required for **Publish**)
+- `PRINTIFY_SHOP_ID` (required for **Publish**)
+- `R2_ACCOUNT_ID` (required for **Publish**)
+- `R2_ACCESS_KEY_ID` (required for **Publish**)
+- `R2_SECRET_ACCESS_KEY` (required for **Publish**)
+- `R2_BUCKET` (required for **Publish**)
+- `R2_PUBLIC_BASE_URL` (required for **Publish**)
+
+Use `.env.example` as the template.
 
 ## 2) CLI first (recommended)
 
@@ -51,23 +54,26 @@ python run_queue.py --once
 python run_queue.py --run_all
 ```
 
-The CLI now reports pass counts explicitly (`generated`, `failed`, `approved`, `rejected`, `published`).
+The CLI reports pass counts explicitly (`generated`, `failed`, `approved`, `rejected`, `published`).
 
-## 3) Local control panel (FastAPI)
+## 3) Local Control Panel (FastAPI)
+
+Start from the repo root:
 
 ```bash
-uvicorn ui_app.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn ui_app.main:app --host 127.0.0.1 --port 8080 --reload
 ```
 
-Open <http://127.0.0.1:8000>.
+Open <http://127.0.0.1:8080>.
 
-Dashboard includes:
-- Seed / Generate / Verify / Publish / Run All
-- Queue viewer
-- Gallery viewer (`out/`, `output/`)
-- Live status panel
-- First-run wizard (env + queue checks)
-- Drop picker with search + select all/none + custom drop fallback
+The local control panel includes:
+
+- Main actions: **Seed**, **Generate**, **Verify**, **Publish Once**, **Run All**
+- Queue utilities: **Clear Generated/Processed**, **Clear Queue** (with confirmation)
+- First-run readiness checks aligned to runtime env vars
+- Queue table viewer and gallery viewer (`out/`, `output/`)
+- Live status and last-action results
+- Drop picker with search + select all/clear all
 
 ## 4) Embroidery safety config
 
