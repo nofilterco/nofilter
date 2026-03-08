@@ -272,7 +272,7 @@ def _draw_spaced_text(draw: ImageDraw.ImageDraw, origin: Tuple[int, int], text: 
     x, y = origin
     cursor = x
     for ch in text:
-        draw.text((cursor, y), ch, font=font, fill=fill)
+        draw.text((cursor, y), ch, font=font, fill=fill, stroke_width=1, stroke_fill=fill)
         bb = draw.textbbox((cursor, y), ch, font=font)
         cursor += (bb[2] - bb[0]) + tracking
     return cursor - x
@@ -293,11 +293,11 @@ def _fit_font(draw: ImageDraw.ImageDraw, text: str, area: Tuple[int, int, int, i
     return _load_font(font_path, min_size)
 
 FONT_ROLES = {
-    "headline": os.path.join("assets", "fonts", "Montserrat-Black.ttf"),
-    "subheadline": os.path.join("assets", "fonts", "Montserrat-Bold.ttf"),
-    "condensed": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
-    "mono_tech": os.path.join("assets", "fonts", "Montserrat-SemiBold.ttf"),
-    "varsity": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
+    "headline_font": os.path.join("assets", "fonts", "Montserrat-Black.ttf"),
+    "subheadline_font": os.path.join("assets", "fonts", "Montserrat-Bold.ttf"),
+    "condensed_font": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
+    "mono_font": os.path.join("assets", "fonts", "Montserrat-SemiBold.ttf"),
+    "varsity_font": os.path.join("assets", "fonts", "Anton-Regular.ttf"),
 }
 
 PALETTE_FAMILIES = {
@@ -328,13 +328,60 @@ LAYOUT_TEMPLATES = {
     "icon_above": {"text": "center", "icon": "top", "line_spacing": 1.08, "safe_padding": 58},
 }
 
-TEMPLATE_FONT_SYSTEM = {
-    "bold_single_line": ("condensed", "subheadline"),
-    "stacked_two_line": ("headline", "subheadline"),
-    "club_mark": ("varsity", "subheadline"),
-    "service_mark": ("headline", "mono_tech"),
-    "icon_left": ("headline", "subheadline"),
-    "icon_above": ("headline", "mono_tech"),
+TRACKING_VALUES = {"tight": -2, "normal": 0, "wide": 2}
+
+TYPOGRAPHY_TEMPLATES = {
+    "BIG_WORD": {
+        "line_roles": ["condensed_font"],
+        "size_weights": [1.0],
+        "tracking": "tight",
+        "line_spacing": 1.0,
+        "alignment": "center",
+    },
+    "STACKED_TWO": {
+        "line_roles": ["subheadline_font", "headline_font"],
+        "size_weights": [0.8, 1.0],
+        "tracking": "normal",
+        "line_spacing": 0.9,
+        "alignment": "center",
+    },
+    "STACKED_THREE": {
+        "line_roles": ["subheadline_font", "headline_font", "subheadline_font"],
+        "size_weights": [0.78, 1.0, 0.82],
+        "tracking": "normal",
+        "line_spacing": 0.88,
+        "alignment": "center",
+    },
+    "SERVICE_MARK": {
+        "line_roles": ["mono_font", "headline_font"],
+        "size_weights": [0.76, 1.0],
+        "tracking": "wide",
+        "line_spacing": 0.95,
+        "alignment": "center",
+    },
+    "CLUB_MARK": {
+        "line_roles": ["varsity_font", "subheadline_font"],
+        "size_weights": [1.0, 0.72],
+        "tracking": "tight",
+        "line_spacing": 0.9,
+        "alignment": "center",
+    },
+    "SMALL_BIG_SMALL": {
+        "line_roles": ["mono_font", "headline_font", "mono_font"],
+        "size_weights": [0.72, 1.0, 0.72],
+        "tracking": "wide",
+        "line_spacing": 0.88,
+        "alignment": "center",
+    },
+}
+
+LEGACY_TO_TYPO_TEMPLATE = {
+    "bold_single_line": "BIG_WORD",
+    "stacked_two_line": "STACKED_TWO",
+    "service_mark": "SERVICE_MARK",
+    "club_mark": "CLUB_MARK",
+    "icon_left": "SMALL_BIG_SMALL",
+    "icon_above": "STACKED_THREE",
 }
 
 ICON_FAMILY_TO_MOTIF = {
@@ -354,9 +401,12 @@ ICON_FAMILY_TO_MOTIF = {
 @dataclass
 class TypographyLayout:
     lines: List[str]
-    font_primary: str
-    tracking: int
+    typography_template: str
+    line_roles: List[str]
+    line_weights: List[float]
+    tracking_mode: str
     line_spacing: float
+    alignment: str
 
 
 def _pick_palette_family(name: str, rng: random.Random) -> Tuple[str, List[Tuple[int, int, int]]]:
@@ -382,16 +432,59 @@ def _resolve_template(brief, family: str, phrase: str) -> str:
 
 def _split_lines_for_template(phrase: str, template: str) -> List[str]:
     words = phrase.split()
-    if template == "bold_single_line":
+    if not words:
         return [phrase]
-    if len(words) <= 2:
-        return words if len(words) == 2 else [phrase]
-    if template in ("stacked_two_line", "club_mark", "service_mark"):
+    if template in ("BIG_WORD",):
+        return [phrase]
+    if template in ("SERVICE_MARK", "CLUB_MARK", "STACKED_TWO"):
+        if len(words) == 1:
+            return [phrase]
+        if len(words) == 2:
+            return [words[0], words[1]]
         mid = max(1, len(words) // 2)
         return [" ".join(words[:mid]), " ".join(words[mid:])]
-    if len(words) >= 5:
-        return [" ".join(words[:3]), " ".join(words[3:])]
+    if template in ("STACKED_THREE", "SMALL_BIG_SMALL"):
+        if len(words) <= 2:
+            return words
+        if len(words) == 3:
+            return words
+        return [words[0], " ".join(words[1:-1]), words[-1]]
     return [phrase]
+
+
+def _classify_phrase(phrase: str) -> Dict[str, int]:
+    txt = (phrase or "").strip()
+    return {
+        "word_count": len(txt.split()),
+        "char_length": len(txt.replace(" ", "")),
+    }
+
+
+def _pick_typography_template(legacy_template: str, phrase: str) -> str:
+    stats = _classify_phrase(phrase)
+    word_count = stats["word_count"]
+    char_length = stats["char_length"]
+    forced = LEGACY_TO_TYPO_TEMPLATE.get(legacy_template, "")
+    if forced in ("SERVICE_MARK", "CLUB_MARK"):
+        return forced
+    if word_count <= 1:
+        return "BIG_WORD"
+    if word_count == 2:
+        return "STACKED_TWO"
+    if word_count == 3:
+        return "STACKED_THREE" if char_length < 16 else "SMALL_BIG_SMALL"
+    return "SMALL_BIG_SMALL"
+
+
+def _apply_phrase_emphasis(lines: List[str], phrase: str, rng: random.Random) -> List[float]:
+    weights = [1.0 for _ in lines]
+    if len(lines) <= 1:
+        return weights
+    boost_idx = max(range(len(lines)), key=lambda i: len(lines[i].replace(" ", "")))
+    if rng.random() < 0.35:
+        boost_idx = len(lines) - 1
+    weights[boost_idx] = 1.15
+    return weights
 
 
 def _measure_with_tracking(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, tracking: int) -> int:
@@ -406,7 +499,7 @@ def _draw_tracked_text(draw: ImageDraw.ImageDraw, origin: Tuple[int, int], text:
     x, y = origin
     cursor = x
     for i, ch in enumerate(text):
-        draw.text((cursor, y), ch, font=font, fill=fill)
+        draw.text((cursor, y), ch, font=font, fill=fill, stroke_width=1, stroke_fill=fill)
         bb = draw.textbbox((0, 0), ch, font=font)
         advance = bb[2] - bb[0]
         if hasattr(font, "getlength"):
@@ -495,22 +588,80 @@ def _draw_icon_v2(draw: ImageDraw.ImageDraw, motif: str, box: Tuple[int, int, in
 
 def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[int, int, int, int], template: str, color: Tuple[int, int, int]) -> Dict[str, str]:
     phrase = (phrase or "OFFLINE TODAY").upper()
-    lines = _split_lines_for_template(phrase, template)
-    tracking = 2 if template in ("bold_single_line", "club_mark") else 1
-    font_role = TEMPLATE_FONT_SYSTEM.get(template, ("headline", "subheadline"))[0]
-    spacing = float(LAYOUT_TEMPLATES[template]["line_spacing"])
-    font = _fit_font_size(draw, lines, text_box, FONT_ROLES[font_role], spacing, tracking)
+    typo_template = _pick_typography_template(template, phrase)
+    cfg = TYPOGRAPHY_TEMPLATES[typo_template]
+    lines = _split_lines_for_template(phrase, typo_template)
+    rng = random.Random(abs(hash(phrase)))
+    emphasis = _apply_phrase_emphasis(lines, phrase, rng)
+
+    line_roles = list(cfg["line_roles"])
+    while len(line_roles) < len(lines):
+        line_roles.append(line_roles[-1])
+    line_roles = line_roles[:len(lines)]
+
+    base_weights = list(cfg["size_weights"])
+    while len(base_weights) < len(lines):
+        base_weights.append(base_weights[-1])
+    base_weights = base_weights[:len(lines)]
+
+    tracking_mode = cfg["tracking"]
+    tracking = TRACKING_VALUES.get(tracking_mode, 0)
+    spacing = float(cfg["line_spacing"])
     fill = color + (255,)
     x0, y0, x1, y1 = text_box
-    line_h = draw.textbbox((0, 0), "Ag", font=font)[3]
-    total_h = int(line_h * len(lines) * spacing)
-    y = y0 + ((y1 - y0) - total_h) // 2
-    for line in lines:
-        w = _measure_with_tracking(draw, line, font, tracking)
-        x = x0 + ((x1 - x0) - w) // 2
-        _draw_tracked_text(draw, (x, y), line, font, fill, tracking)
-        y += int(line_h * spacing)
-    return {"tracking": str(tracking), "stacked": "true" if len(lines) > 1 else "false", "font_role": font_role, "line_count": str(len(lines))}
+    max_w = x1 - x0
+    max_h = y1 - y0
+    min_letter_height = 38
+    min_stroke_hint = 2
+
+    target_fill = 0.75 if len(lines) == 1 else 0.7
+    base_size = 140
+    fonts: List[ImageFont.ImageFont] = []
+    metrics = []
+    while base_size >= min_letter_height:
+        fonts = []
+        metrics = []
+        for idx, line in enumerate(lines):
+            weight = base_weights[idx] * emphasis[idx]
+            line_size = max(min_letter_height, int(base_size * weight))
+            font = _load_font(FONT_ROLES[line_roles[idx]], line_size)
+            ascent, descent = font.getmetrics()
+            width = _measure_with_tracking(draw, line, font, tracking)
+            metrics.append({"width": width, "ascent": ascent, "descent": descent, "height": ascent + descent})
+            fonts.append(font)
+
+        text_width = max(m["width"] for m in metrics)
+        total_h = sum(m["height"] for m in metrics)
+        total_h += int((len(lines) - 1) * (sum(m["height"] for m in metrics) / max(1, len(lines)) * spacing * 0.25))
+        if text_width <= int(max_w * target_fill) and total_h <= max_h:
+            break
+        base_size -= 2
+
+    total_h = sum(m["height"] for m in metrics)
+    gap = int((sum(m["height"] for m in metrics) / max(1, len(lines))) * spacing * 0.25)
+    total_h += gap * (len(lines) - 1)
+    y = y0 + (max_h - total_h) // 2
+
+    for idx, line in enumerate(lines):
+        font = fonts[idx]
+        m = metrics[idx]
+        line_w = m["width"]
+        x = x0 + (max_w - line_w) // 2
+        baseline_y = y + m["ascent"]
+        _draw_tracked_text(draw, (x, baseline_y - m["ascent"]), line, font, fill, tracking)
+        y += m["height"] + gap
+
+    return {
+        "tracking": tracking_mode,
+        "stacked": "true" if len(lines) > 1 else "false",
+        "font_role": "/".join(line_roles),
+        "line_count": str(len(lines)),
+        "word_count": str(_classify_phrase(phrase)["word_count"]),
+        "char_length": str(_classify_phrase(phrase)["char_length"]),
+        "typography_template": typo_template,
+        "min_letter_height_px": str(min_letter_height),
+        "min_stroke_width_px": str(min_stroke_hint),
+    }
 
 
 def _validate_composition(phrase: str, template: str, icon_present: bool, icon_box: Tuple[int, int, int, int], text_box: Tuple[int, int, int, int]) -> List[str]:
@@ -620,6 +771,11 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
         "shape_quality": "refined" if shape_quality not in ("none", "generic") else shape_quality,
         "letter_spacing": typo_info.get("tracking", "0"),
         "vertical_stacking": typo_info.get("stacked", "false"),
+        "typography_template": typo_info.get("typography_template", ""),
+        "word_count": typo_info.get("word_count", ""),
+        "char_length": typo_info.get("char_length", ""),
+        "min_letter_height_px": typo_info.get("min_letter_height_px", ""),
+        "min_stroke_width_px": typo_info.get("min_stroke_width_px", ""),
         "centered_layout": "true",
         "design_family": family,
         "slogan_family": str(getattr(brief, "slogan_family", "")),
