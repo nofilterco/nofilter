@@ -1,3 +1,4 @@
+import math
 import os
 import random
 import textwrap
@@ -330,6 +331,25 @@ LAYOUT_TEMPLATES = {
 
 TRACKING_VALUES = {"tight": -2, "normal": 0, "wide": 2}
 
+STYLE_TREATMENTS = {
+    "outline_text",
+    "drop_shadow",
+    "divider_line",
+    "badge_ring",
+    "text_arc",
+    "accent_icon",
+}
+
+TEMPLATE_TREATMENT_OPTIONS = {
+    "club_mark": [["badge_ring"], ["text_arc"]],
+    "service_mark": [["divider_line"], ["outline_text", "divider_line"]],
+    "stacked_two_line": [["outline_text"], ["outline_text", "drop_shadow"]],
+    "tech_status": [["drop_shadow"], ["outline_text"]],
+    "bold_single_line": [["outline_text"], ["drop_shadow"]],
+    "icon_left": [["outline_text", "accent_icon"], ["drop_shadow", "accent_icon"]],
+    "icon_above": [["outline_text", "accent_icon"], ["text_arc", "accent_icon"]],
+}
+
 TYPOGRAPHY_TEMPLATES = {
     "BIG_WORD": {
         "line_roles": ["condensed_font"],
@@ -508,6 +528,93 @@ def _draw_tracked_text(draw: ImageDraw.ImageDraw, origin: Tuple[int, int], text:
     return cursor - x
 
 
+def _draw_tracked_text_styled(
+    draw: ImageDraw.ImageDraw,
+    origin: Tuple[int, int],
+    text: str,
+    font: ImageFont.ImageFont,
+    fill: Tuple[int, int, int, int],
+    tracking: int,
+    *,
+    stroke_width: int = 0,
+    stroke_fill: Optional[Tuple[int, int, int, int]] = None,
+) -> int:
+    x, y = origin
+    cursor = x
+    for i, ch in enumerate(text):
+        draw.text(
+            (cursor, y),
+            ch,
+            font=font,
+            fill=fill,
+            stroke_width=max(0, stroke_width),
+            stroke_fill=stroke_fill or fill,
+        )
+        bb = draw.textbbox((0, 0), ch, font=font)
+        advance = bb[2] - bb[0]
+        if hasattr(font, "getlength"):
+            advance = int(round(font.getlength(ch)))
+        cursor += advance + (tracking if i < len(text) - 1 else 0)
+    return cursor - x
+
+
+def _draw_arc_text(
+    canvas: Image.Image,
+    text: str,
+    font: ImageFont.ImageFont,
+    center: Tuple[int, int],
+    radius: int,
+    fill: Tuple[int, int, int, int],
+    tracking: int,
+    *,
+    stroke_width: int = 0,
+    stroke_fill: Optional[Tuple[int, int, int, int]] = None,
+) -> None:
+    if not text:
+        return
+    glyph_widths = []
+    for ch in text:
+        bb = font.getbbox(ch)
+        glyph_widths.append(max(1, bb[2] - bb[0]))
+    total_w = sum(glyph_widths) + max(0, len(text) - 1) * tracking
+    circumference_span = max(0.15, min(0.8, total_w / max(1, (2 * 3.1415 * radius))))
+    total_angle = circumference_span * 360.0
+    start_angle = -90.0 - (total_angle / 2.0)
+    angle_step = total_angle / max(1, len(text) - 1)
+
+    for i, ch in enumerate(text):
+        angle = start_angle + (i * angle_step)
+        rad = angle * 3.14159265 / 180.0
+        gx = int(center[0] + radius * math.cos(rad))
+        gy = int(center[1] + radius * math.sin(rad))
+        glyph = Image.new("RGBA", (font.size * 2, font.size * 2), (0, 0, 0, 0))
+        gd = ImageDraw.Draw(glyph)
+        gd.text(
+            (font.size // 2, font.size // 2),
+            ch,
+            font=font,
+            fill=fill,
+            stroke_width=max(0, stroke_width),
+            stroke_fill=stroke_fill or fill,
+        )
+        rot = glyph.rotate(angle + 90.0, resample=Image.Resampling.BICUBIC, expand=True)
+        canvas.alpha_composite(rot, (gx - rot.width // 2, gy - rot.height // 2))
+
+
+def _select_style_treatments(template: str, family: str, rng: random.Random) -> Dict[str, str]:
+    options = TEMPLATE_TREATMENT_OPTIONS.get(template, [["outline_text"]])
+    picked = set(rng.choice(options))
+    if family in ("club_mark", "service_mark") and rng.random() < 0.5:
+        picked.add("accent_icon")
+    if template == "club_mark" and "text_arc" in picked:
+        picked.discard("divider_line")
+    placement = rng.choice(["left", "right", "above"])
+    return {
+        "treatments": ",".join(sorted(t for t in picked if t in STYLE_TREATMENTS)),
+        "accent_placement": placement,
+    }
+
+
 def _fit_font_size(draw: ImageDraw.ImageDraw, lines: List[str], text_box: Tuple[int, int, int, int], font_path: str, line_spacing: float, tracking: int, *, start: int = 132, min_size: int = 26) -> ImageFont.ImageFont:
     x0, y0, x1, y1 = text_box
     max_w = x1 - x0
@@ -586,7 +693,16 @@ def _draw_icon_v2(draw: ImageDraw.ImageDraw, motif: str, box: Tuple[int, int, in
     return "refined"
 
 
-def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[int, int, int, int], template: str, color: Tuple[int, int, int]) -> Dict[str, str]:
+def _draw_typography_v2(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    phrase: str,
+    text_box: Tuple[int, int, int, int],
+    template: str,
+    color: Tuple[int, int, int],
+    secondary: Tuple[int, int, int],
+    treatments: set,
+) -> Dict[str, str]:
     phrase = (phrase or "OFFLINE TODAY").upper()
     typo_template = _pick_typography_template(template, phrase)
     cfg = TYPOGRAPHY_TEMPLATES[typo_template]
@@ -608,6 +724,9 @@ def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[
     tracking = TRACKING_VALUES.get(tracking_mode, 0)
     spacing = float(cfg["line_spacing"])
     fill = color + (255,)
+    shadow_fill = secondary + (255,)
+    stroke_width = 3 if "outline_text" in treatments else 0
+    stroke_fill = shadow_fill if stroke_width else None
     x0, y0, x1, y1 = text_box
     max_w = x1 - x0
     max_h = y1 - y0
@@ -642,14 +761,57 @@ def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[
     total_h += gap * (len(lines) - 1)
     y = y0 + (max_h - total_h) // 2
 
+    line_y_positions: List[int] = []
     for idx, line in enumerate(lines):
         font = fonts[idx]
         m = metrics[idx]
         line_w = m["width"]
         x = x0 + (max_w - line_w) // 2
         baseline_y = y + m["ascent"]
-        _draw_tracked_text(draw, (x, baseline_y - m["ascent"]), line, font, fill, tracking)
+        draw_y = baseline_y - m["ascent"]
+        line_y_positions.append(draw_y)
+        if "drop_shadow" in treatments:
+            _draw_tracked_text_styled(
+                draw,
+                (x + 3, draw_y + 3),
+                line,
+                font,
+                shadow_fill,
+                tracking,
+                stroke_width=0,
+            )
+        if "text_arc" in treatments and idx == 0 and len(lines) > 1:
+            center = (x0 + max_w // 2, y0 + int(max_h * 0.68))
+            radius = max(80, int(max_w * 0.38))
+            _draw_arc_text(
+                canvas,
+                line,
+                font,
+                center,
+                radius,
+                fill,
+                tracking,
+                stroke_width=stroke_width,
+                stroke_fill=stroke_fill,
+            )
+        else:
+            _draw_tracked_text_styled(
+                draw,
+                (x, draw_y),
+                line,
+                font,
+                fill,
+                tracking,
+                stroke_width=stroke_width,
+                stroke_fill=stroke_fill,
+            )
         y += m["height"] + gap
+
+    if "divider_line" in treatments and len(line_y_positions) >= 2:
+        divider_y = line_y_positions[0] + metrics[0]["height"] + max(6, gap // 2)
+        left = x0 + int(max_w * 0.24)
+        right = x1 - int(max_w * 0.24)
+        draw.line((left, divider_y, right, divider_y), fill=secondary + (255,), width=3)
 
     return {
         "tracking": tracking_mode,
@@ -661,7 +823,24 @@ def _draw_typography_v2(draw: ImageDraw.ImageDraw, phrase: str, text_box: Tuple[
         "typography_template": typo_template,
         "min_letter_height_px": str(min_letter_height),
         "min_stroke_width_px": str(min_stroke_hint),
+        "style_treatments": ",".join(sorted(treatments)),
     }
+
+
+def _draw_badge_ring(draw: ImageDraw.ImageDraw, safe_box: Tuple[int, int, int, int], color: Tuple[int, int, int]) -> None:
+    x0, y0, x1, y1 = safe_box
+    pad = 24
+    draw.ellipse((x0 + pad, y0 + pad, x1 - pad, y1 - pad), outline=color + (255,), width=4)
+
+
+def _accent_icon_box(text_box: Tuple[int, int, int, int], placement: str) -> Tuple[int, int, int, int]:
+    x0, y0, x1, y1 = text_box
+    size = min(120, max(78, int((y1 - y0) * 0.24)))
+    if placement == "left":
+        return (x0 - size - 14, y0 + (y1 - y0) // 2 - size // 2, x0 - 14, y0 + (y1 - y0) // 2 + size // 2)
+    if placement == "right":
+        return (x1 + 14, y0 + (y1 - y0) // 2 - size // 2, x1 + 14 + size, y0 + (y1 - y0) // 2 + size // 2)
+    return (x0 + (x1 - x0) // 2 - size // 2, y0 - size - 12, x0 + (x1 - x0) // 2 + size // 2, y0 - 12)
 
 
 def _validate_composition(phrase: str, template: str, icon_present: bool, icon_box: Tuple[int, int, int, int], text_box: Tuple[int, int, int, int]) -> List[str]:
@@ -724,21 +903,29 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
     draw = ImageDraw.Draw(canvas)
     stroke = max(6, int(CANVAS_HAT[0] * 0.0055))
     icon_box, text_box = _layout_boxes(template, safe_x0, safe_y0, safe_x1, safe_y1)
+    style_cfg = _select_style_treatments(template, family, rng)
+    treatments = set([t for t in style_cfg["treatments"].split(",") if t])
 
     icon_family = (getattr(brief, "accent_icon_family", "none") or "none").strip().lower()
     motif = ICON_FAMILY_TO_MOTIF.get(icon_family, icon_family)
     icon_present = design_mode in ("icon_phrase_hat", "icon_only") and icon_family != "none"
     shape_quality = "none"
-    if icon_present:
-        shape_quality = _draw_icon_v2(draw, motif, icon_box, (c1, c2, c3), stroke)
+
+    if "badge_ring" in treatments:
+        _draw_badge_ring(draw, (safe_x0, safe_y0, safe_x1, safe_y1), c2)
+
+    typo_info = {}
+    if design_mode != "icon_only":
+        typo_info = _draw_typography_v2(canvas, draw, phrase, text_box, template, c1, c2, treatments)
+
+    if icon_present or "accent_icon" in treatments:
+        placement = style_cfg.get("accent_placement", "above")
+        draw_box = _accent_icon_box(text_box, placement) if "accent_icon" in treatments else icon_box
+        shape_quality = _draw_icon_v2(draw, motif, draw_box, (c1, c2, c3), max(2, stroke // 2))
         if shape_quality == "generic":
             icon_present = False
             if design_mode == "icon_only":
                 design_mode = "phrase_hat"
-
-    typo_info = {}
-    if design_mode != "icon_only":
-        typo_info = _draw_typography_v2(draw, phrase, text_box, template, c1)
 
     failures = _validate_composition(phrase, template, icon_present, icon_box, text_box)
     rule_flags = _apply_embroidery_rules(phrase, template, icon_present)
@@ -782,6 +969,7 @@ def _render_vector_hat_art(brief, resolved_style: str) -> Tuple[Image.Image, Dic
         "font_pairing": str(getattr(brief, "font_pairing", "")),
         "palette_family": palette_family,
         "accent_icon_family": icon_family,
+        "style_treatments": ",".join(sorted(treatments)),
         "merch_style": str(getattr(brief, "merch_style", "")),
         "phrase_category": str(getattr(brief, "phrase_category", "")),
         "merch_taste_score": str(max(1, min(10, merch_taste))),
