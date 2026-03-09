@@ -40,8 +40,8 @@ def resolve_profile(row: dict[str, str], profile: dict[str, Any]) -> dict[str, A
         if unresolved:
             row["launch_status"] = "BLOCKED_PROFILE"
             row["error_stage"] = "PROFILE"
-            row["printify_publish_status"] = "blocked_profile_unresolved"
-            row["shopify_sync_status"] = "SYNC_FAILED"
+            row["printify_publish_status"] = "BLOCKED_PROFILE"
+            row["shopify_sync_status"] = "BLOCKED_PROFILE"
             row["error_message"] = f"Unresolved tote profile metadata: missing {', '.join(unresolved)}."
     return row
 
@@ -137,14 +137,14 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
 def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
     row["last_sync_check_at"] = now_iso()
     if not row.get("printify_product_id"):
-        row["shopify_sync_status"] = "SYNC_FAILED"
+        row["shopify_sync_status"] = "NOT_ATTEMPTED"
         return
     try:
         product = get_product(shop_id, row["printify_product_id"])
         visible = bool(product.get("visible"))
         row["shopify_sync_status"] = "SYNC_PENDING" if visible else "SYNC_PENDING"
     except Exception:
-        row["shopify_sync_status"] = "SYNC_FAILED"
+        row["shopify_sync_status"] = "NOT_ATTEMPTED"
 
     shopify_id = row.get("shopify_product_id") or ""
     if not shopify_id and row.get("shopify_handle"):
@@ -179,14 +179,14 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, 
         row["error_stage"] = row.get("error_stage") or "PROFILE"
         row["launch_status"] = "BLOCKED_PROFILE"
         row["error_message"] = row.get("error_message") or "Tote publishing blocked: unresolved blueprint/provider/variant profile metadata."
-        row["printify_publish_status"] = "blocked_profile_unresolved"
-        row["shopify_sync_status"] = "SYNC_FAILED"
+        row["printify_publish_status"] = "BLOCKED_PROFILE"
+        row["shopify_sync_status"] = "NOT_ATTEMPTED"
         return row
 
     payload = build_printify_payload(row)
     row["_last_printify_payload"] = json.dumps(payload, ensure_ascii=False)
     if dry_run:
-        row["printify_publish_status"] = "dry_run"
+        row["printify_publish_status"] = "NOT_ATTEMPTED"
         return row
 
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "")
@@ -194,7 +194,7 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, 
         # Local non-network fallback keeps pipeline testable in offline/dev runs.
         row["printify_product_id"] = row.get("printify_product_id") or f"mock-printify-{row.get('id','0')}"
         row["last_publish_response"] = json.dumps({"mock": True, "reason": "PRINTIFY_SHOP_ID missing", "id": row["printify_product_id"]})
-        row["printify_publish_status"] = "published"
+        row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
         row["shopify_sync_status"] = "SYNC_PENDING"
         row["status"] = "PUBLISHED_TO_PRINTIFY"
         return row
@@ -203,13 +203,13 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, 
         created = create_product(shop_id, payload)
         row["printify_product_id"] = str(created.get("id", ""))
         row["last_publish_response"] = json.dumps(created, ensure_ascii=False)[:5000]
-        row["printify_publish_status"] = "created" if row["printify_product_id"] else "create_missing_id"
+        row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY" if row["printify_product_id"] else "PUBLISH_FAILED"
         if row.get("publish_mode") in ("personalized", "both"):
             row["needs_manual_personalization_setup"] = "YES"
         if row["printify_product_id"]:
             publish_resp = printify_publish(shop_id, row["printify_product_id"])
             row["last_publish_response"] = json.dumps(publish_resp, ensure_ascii=False)[:5000]
-            row["printify_publish_status"] = "published"
+            row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
             _sync_status_check(row, shop_id)
             row["status"] = "PUBLISHED_TO_PRINTIFY"
             row["error_stage"] = ""
@@ -220,11 +220,11 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, 
     except PrintifyAPIError as exc:
         row["error_stage"] = "PRINTIFY_API"
         row["error_message"] = str(exc)
-        row["printify_publish_status"] = "printify_api_error"
+        row["printify_publish_status"] = "PUBLISH_FAILED"
         row["last_publish_response"] = str(exc)
     except Exception as exc:
         row["error_stage"] = "PUBLISH"
         row["error_message"] = f"Unexpected publish error: {exc}"
-        row["printify_publish_status"] = "publish_error"
+        row["printify_publish_status"] = "PUBLISH_FAILED"
         row["last_publish_response"] = str(exc)
     return row

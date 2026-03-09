@@ -44,12 +44,12 @@ def migrate_if_needed() -> None:
         n["debug_trace"] = "legacy-row-imported"
         n["show_all_variants"] = row.get("show_all_variants") or "NO"
         n["in_stock_only"] = row.get("in_stock_only") or "YES"
-        n["printify_publish_status"] = row.get("printify_publish_status") or "not_attempted"
-        n["shopify_sync_status"] = row.get("shopify_sync_status") or "SYNC_PENDING"
-        n["launch_status"] = row.get("launch_status") or "MANUAL_PERSONALIZATION_REQUIRED"
+        n["printify_publish_status"] = row.get("printify_publish_status") or "NOT_ATTEMPTED"
+        n["shopify_sync_status"] = row.get("shopify_sync_status") or "NOT_ATTEMPTED"
+        n["launch_status"] = row.get("launch_status") or "NOT_ATTEMPTED"
         n["publish_log_history_json"] = row.get("publish_log_history_json") or "[]"
         n["preview_artifacts_json"] = row.get("preview_artifacts_json") or "{}"
-        n["manual_setup_status"] = row.get("manual_setup_status") or "pending"
+        n["manual_setup_status"] = row.get("manual_setup_status") or "not_required"
         migrated.append(n)
     _write(migrated)
 
@@ -88,16 +88,56 @@ def next_id(rows: list[dict[str, Any]]) -> int:
     return max(vals or [0]) + 1
 
 
-def dump_launch_report(path: str = "launch_report.json") -> str:
+
+def _is_valid_operational_row(row: dict[str, str]) -> bool:
+    required = ["collection_slug", "product_profile_id", "template_family", "title", "seo_title", "listing_slug"]
+    if any(not (row.get(k) or "").strip() for k in required):
+        return False
+    preview = json.loads(row.get("preview_artifacts_json") or "{}")
+    primary = str(preview.get("primary_preview") or "")
+    if "placeholder__primary.png" in primary and not row.get("collection_slug"):
+        return False
+    return True
+
+
+def _operational_rows(debug_include_invalid: bool = False) -> list[dict[str, str]]:
     rows = load_rows()
+    if debug_include_invalid:
+        return rows
+    return [r for r in rows if _is_valid_operational_row(r)]
+
+
+
+def _clean_seo_title(value: str) -> str:
+    words = (value or "").split()
+    deduped: list[str] = []
+    for token in words:
+        key = token.lower()
+        if deduped and deduped[-1].lower() == key:
+            continue
+        deduped.append(token)
+    phrase = " ".join(deduped)
+    phrase = phrase.replace("Family Reunion Family Reunion", "Family Reunion")
+    return phrase
+
+
+def _clean_public_tags(value: str) -> str:
+    blocked = {"reunion_location"}
+    tags = [t.strip() for t in (value or "").split(",") if t.strip()]
+    tags = [t for t in tags if t.lower() not in blocked]
+    return ",".join(dict.fromkeys(tags))
+
+def dump_launch_report(path: str = "launch_report.json", *, debug_include_invalid: bool = False) -> str:
+    rows = _operational_rows(debug_include_invalid)
     payload = [{
-        "collection": r["collection_slug"], "title": r["title"], "seo_title": r["seo_title"], "description_html": r["description_html"], "tags": r["tags_csv"],
+        "collection": r["collection_slug"], "title": r["title"], "seo_title": _clean_seo_title(r["seo_title"]), "description_html": r["description_html"], "tags": _clean_public_tags(r["tags_csv"]),
         "sizes": json.loads(r["enabled_sizes_json"] or "[]"), "colors": json.loads(r["enabled_colors_json"] or "[]"),
         "profile": r["product_profile_id"], "status": r["status"], "stock_mode": "in_stock_only" if (r.get("in_stock_only") == "YES") else "all_variants",
         "template_family": r.get("template_family", ""),
-        "placeholder_art_mode": r.get("placeholder_art_mode", ""),
+        "art_strategy_internal": r.get("placeholder_art_mode", ""),
         "launch_status": r.get("launch_status", ""),
         "preview_style": r.get("preview_style", ""),
+        "storefront_preview_style": r.get("preview_style", ""),
         "preview_artifact_paths": json.loads(r.get("preview_artifacts_json") or "{}"),
         "manual_setup_packet_status": r.get("manual_setup_status", ""),
         "manual_setup_packet_path": r.get("manual_setup_packet_path", ""),
@@ -119,14 +159,18 @@ def dump_launch_report(path: str = "launch_report.json") -> str:
     return path
 
 
-def dump_ops_review_csv(path: str = "launch_ops_review.csv") -> str:
-    rows = load_rows()
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "placeholder_art_mode", "preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants"]
+def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
+    rows = _operational_rows(debug_include_invalid)
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for r in rows:
-            w.writerow({k: r.get(k, "") for k in fieldnames})
+            enriched = dict(r)
+            enriched["art_strategy_internal"] = r.get("placeholder_art_mode", "")
+            enriched["preview_style"] = r.get("preview_style", "")
+            enriched["storefront_preview_style"] = r.get("preview_style", "")
+            w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
 
 
@@ -137,5 +181,9 @@ def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
         for r in rows:
-            w.writerow({k: r.get(k, "") for k in fieldnames})
+            enriched = dict(r)
+            enriched["art_strategy_internal"] = r.get("placeholder_art_mode", "")
+            enriched["preview_style"] = r.get("preview_style", "")
+            enriched["storefront_preview_style"] = r.get("preview_style", "")
+            w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
