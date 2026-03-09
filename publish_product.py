@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 
-from printify_catalog import PrintifyAPIError, create_product, publish_product as printify_publish, upload_image
+from printify_catalog import PrintifyAPIError, create_product, get_product, publish_product as printify_publish, upload_image
+from shopify_helper import find_product_id_by_title
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def resolve_profile(row: dict[str, str], profile: dict[str, Any]) -> dict[str, Any]:
@@ -110,30 +116,57 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
     return payload
 
 
+def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
+    row["last_sync_check_at"] = now_iso()
+    if not row.get("printify_product_id"):
+        row["shopify_sync_status"] = "missing_printify_product_id"
+        return
+    try:
+        product = get_product(shop_id, row["printify_product_id"])
+        visible = bool(product.get("visible"))
+        row["shopify_sync_status"] = "printify_published" if visible else "printify_created"
+    except Exception:
+        row["shopify_sync_status"] = "sync_check_failed"
+
+    shopify_id = find_product_id_by_title(row.get("title", ""))
+    if shopify_id:
+        row["shopify_product_id"] = shopify_id
+        row["shopify_sync_status"] = "shopify_product_resolved"
+
+
 def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, str]:
     if row.get("product_family") == "tote":
         row["error_stage"] = "PUBLISH"
-        row["error_message"] = "Tote publishing blocked: provider/profile mapping not finalized."
+        row["error_message"] = "Tote publishing blocked: profile unresolved. Blueprint/provider/variant IDs are required before publish."
+        row["printify_publish_status"] = "blocked_profile_unresolved"
+        row["shopify_sync_status"] = "blocked"
         return row
 
     payload = build_printify_payload(row)
     row["_last_printify_payload"] = json.dumps(payload, ensure_ascii=False)
     if dry_run:
+        row["printify_publish_status"] = "dry_run"
         return row
 
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "")
     if not shop_id:
         row["error_stage"] = "CONFIG"
         row["error_message"] = "PRINTIFY_SHOP_ID missing"
+        row["printify_publish_status"] = "config_error"
         return row
 
     try:
         created = create_product(shop_id, payload)
         row["printify_product_id"] = str(created.get("id", ""))
+        row["last_publish_response"] = json.dumps(created, ensure_ascii=False)[:5000]
+        row["printify_publish_status"] = "created" if row["printify_product_id"] else "create_missing_id"
         if row.get("publish_mode") in ("personalized", "both"):
             row["needs_manual_personalization_setup"] = "YES"
         if row["printify_product_id"]:
-            printify_publish(shop_id, row["printify_product_id"])
+            publish_resp = printify_publish(shop_id, row["printify_product_id"])
+            row["last_publish_response"] = json.dumps(publish_resp, ensure_ascii=False)[:5000]
+            row["printify_publish_status"] = "published"
+            _sync_status_check(row, shop_id)
             row["status"] = "PUBLISHED"
             row["error_stage"] = ""
             row["error_message"] = ""
@@ -143,7 +176,11 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, 
     except PrintifyAPIError as exc:
         row["error_stage"] = "PRINTIFY_API"
         row["error_message"] = str(exc)
+        row["printify_publish_status"] = "printify_api_error"
+        row["last_publish_response"] = str(exc)
     except Exception as exc:
         row["error_stage"] = "PUBLISH"
         row["error_message"] = f"Unexpected publish error: {exc}"
+        row["printify_publish_status"] = "publish_error"
+        row["last_publish_response"] = str(exc)
     return row

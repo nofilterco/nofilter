@@ -72,21 +72,21 @@ listing_templates:
     shopify_collection_tags: [collection-family-reunion]
     merchandising_keywords: [family reunion, matching shirts]
 
-  - slug: wedding-template
+  - slug: wedding-text-only-template
     collection_slug: wedding-bridal
     status: ready
     product_profile_id: adult_tee_g5000
     style_pack: wedding-bridal
     preferred_layouts: [script_nameplate, monogram_frame, wrap_mug]
-    supports_photo_upload: true
-    supports_logo_upload: true
+    supports_photo_upload: false
+    supports_logo_upload: false
     supports_text_edit: true
-    buyer_visible_field_labels: {wedding_date: "Wedding Date", last_name: "Last Name", couple_photo: "Optional Couple Photo", monogram_logo: "Optional Monogram Logo"}
+    buyer_visible_field_labels: {wedding_date: "Wedding Date", last_name: "Last Name"}
     max_text_lengths: {last_name: 24, wedding_date: 12}
     contrast_mode: auto
     product_safe_area: {tee: {x: 0.16, y: 0.18, w: 0.68, h: 0.58}, mug: {x: 0.08, y: 0.28, w: 0.84, h: 0.42}, tote: {x: 0.14, y: 0.18, w: 0.72, h: 0.62}}
     seo_keywords: [personalized wedding shirt, bridal party apparel, custom wedding gift]
-    description_bullets: ["Personalized for brides, grooms, and party roles", "Upload-ready for logos/photos", "Optimized for wedding weekend gifting"]
+    description_bullets: ["Personalized for brides, grooms, and party roles", "Text personalization is reviewed before production", "Optimized for wedding weekend gifting"]
     title_template: "Bride Est. Personalized T-Shirt"
     seo_title_template: "Bride Est. Personalized Wedding Shirt | Crafted Occasion"
     description_template: "<p>Celebrate engagement and wedding milestones with custom apparel.</p>"
@@ -94,10 +94,8 @@ listing_templates:
     personalization_fields:
       - {field_key: wedding_date, field_label: "Wedding Date", field_type: date, required: true, placeholder: "MM/DD/YYYY"}
       - {field_key: last_name, field_label: "Last Name", field_type: text, max_length: 24, required: true, placeholder: "Parker"}
-    image_upload_fields:
-      - {field_key: couple_photo, field_label: "Couple Photo", file_types: [png, jpg], required: false}
-    logo_upload_fields:
-      - {field_key: monogram_logo, field_label: "Monogram Logo", file_types: [png, svg, jpg], required: false}
+    image_upload_fields: []
+    logo_upload_fields: []
     text_fields:
       - {field_key: wedding_date, field_label: "Wedding Date", required: true}
       - {field_key: last_name, field_label: "Last Name", required: true}
@@ -107,3 +105,73 @@ listing_templates:
     publish_mode: personalized
     shopify_collection_tags: [collection-wedding-bridal]
     merchandising_keywords: [wedding gift, bride shirt]
+
+  - slug: wedding-text-plus-logo-template
+    collection_slug: wedding-bridal
+    status: ready
+    product_profile_id: adult_tee_g5000
+    style_pack: wedding-bridal
+    preferred_layouts: [script_nameplate, monogram_frame]
+    supports_photo_upload: false
+    supports_logo_upload: true
+    supports_text_edit: true
+    buyer_visible_field_labels: {wedding_date: "Wedding Date", last_name: "Last Name", monogram_logo: "Optional Monogram Logo"}
+    max_text_lengths: {last_name: 24, wedding_date: 12}
+    contrast_mode: auto
+    product_safe_area: {tee: {x: 0.16, y: 0.18, w: 0.68, h: 0.58}, mug: {x: 0.08, y: 0.28, w: 0.84, h: 0.42}}
+    seo_keywords: [wedding monogram shirt, bridal logo apparel, custom wedding gift]
+    description_bullets: ["Supports optional monogram/logo upload", "Personalized text + logo workflow", "Wedding weekend group-ready"]
+    title_template: "Bride Crew Custom Hoodie"
+    seo_title_template: "Bride Crew Personalized Hoodie | Crafted Occasion"
+    description_template: "<p>Wedding crew apparel with optional logo details.</p>"
+    tags: [crafted-occasion, wedding-bridal, bride-crew]
+    personalization_fields:
+      - {field_key: wedding_date, field_label: "Wedding Date", field_type: date, required: false, placeholder: "MM/DD/YYYY"}
+      - {field_key: last_name, field_label: "Last Name", field_type: text, max_length: 24, required: false, placeholder: "Parker"}
+    image_upload_fields: []
+    logo_upload_fields:
+      - {field_key: monogram_logo, field_label: "Monogram Logo", file_types: [png, svg, jpg], required: false}
+    text_fields:
+      - {field_key: wedding_date, field_label: "Wedding Date", required: false}
+      - {field_key: last_name, field_label: "Last Name", required: false}
+    personalization_instructions: "Manual Personalization Hub setup required after publishing."
+    art_strategy: script_nameplate
+    default_art_placeholder_text: "Bride Crew"
+    publish_mode: both
+    shopify_collection_tags: [collection-bridal-party]
+    merchandising_keywords: [wedding gift, bride crew]
+
+  - slug: wedding-text-plus-photo-template
+    collection_slug: wedding-bridal
+    status: ready
+    product_profile_id: adult_tee_g5000
+    style_pack: wedding-bridal
+    preferred_layouts: [script_nameplate, wrap_mug]
+    supports_photo_upload: true
+    supports_logo_upload: false
+    supports_text_edit: true
+    buyer_visible_field_labels: {wedding_date: "Wedding Date", last_name: "Last Name", couple_photo: "Optional Couple Photo"}
+    max_text_lengths: {last_name: 24, wedding_date: 12}
+    contrast_mode: auto
+    product_safe_area: {tee: {x: 0.16, y: 0.18, w: 0.68, h: 0.58}, mug: {x: 0.08, y: 0.28, w: 0.84, h: 0.42}}
+    seo_keywords: [photo wedding gift, custom couple mug, wedding keepsake]
+    description_bullets: ["Supports optional couple photo upload", "Text + photo keepsake styling", "Great for bridal shower and wedding gifts"]
+    title_template: "Custom Wedding Date Couple Mug"
+    seo_title_template: "Custom Couple Mug | Crafted Occasion"
+    description_template: "<p>Photo-ready wedding keepsakes for couples.</p>"
+    tags: [crafted-occasion, wedding-bridal, couple-mug]
+    personalization_fields:
+      - {field_key: wedding_date, field_label: "Wedding Date", field_type: date, required: false, placeholder: "MM/DD/YYYY"}
+      - {field_key: last_name, field_label: "Last Name", field_type: text, max_length: 24, required: false, placeholder: "Parker"}
+    image_upload_fields:
+      - {field_key: couple_photo, field_label: "Couple Photo", file_types: [png, jpg], required: false}
+    logo_upload_fields: []
+    text_fields:
+      - {field_key: wedding_date, field_label: "Wedding Date", required: false}
+      - {field_key: last_name, field_label: "Last Name", required: false}
+    personalization_instructions: "Manual Personalization Hub setup required after publishing."
+    art_strategy: script_nameplate
+    default_art_placeholder_text: "Custom Wedding"
+    publish_mode: personalized
+    shopify_collection_tags: [collection-wedding-bridal]
+    merchandising_keywords: [wedding gift, couple mug]

@@ -42,6 +42,9 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
         coll = idx["collections"][coll_slug]
         tpl = idx["templates"].get(item.get("listing_template_id", ""), {})
         row = {k: "" for k in load_rows()[0].keys()} if rows else {}
+        pf = profile.get("product_family", "")
+        default_in_stock_only = pf in {"tee", "hoodie", "crewneck", "mug"}
+        default_show_all_variants = False
         row.update({
             "id": str(start + len(out)),
             "status": "DRAFT",
@@ -71,8 +74,10 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", []))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
             "variant_strategy": "curated_launch",
-            "show_all_variants": "YES" if item.get("show_all_variants", False) else "",
-            "in_stock_only": "YES" if item.get("in_stock_only", False) else "",
+            "show_all_variants": "YES" if bool(item.get("show_all_variants", default_show_all_variants)) else "NO",
+            "in_stock_only": "YES" if bool(item.get("in_stock_only", default_in_stock_only)) else "NO",
+            "printify_publish_status": "not_attempted",
+            "shopify_sync_status": "not_checked",
             "debug_trace": f"{now_iso()}:seeded",
         })
         resolve_profile(row, profile)
