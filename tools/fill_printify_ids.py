@@ -113,7 +113,7 @@ def load_profiles(path: Path, *, debug: bool = False) -> tuple[dict[str, Any], l
     return raw, profiles
 
 
-def discover_blueprints(token: str, *, debug_http: bool = False) -> list[dict[str, Any]]:
+def discover_blueprints(token: str, *, debug: bool = False, debug_http: bool = False) -> list[dict[str, Any]]:
     data = _request_json(token, "/catalog/blueprints.json", debug_http=debug_http)
     if not isinstance(data, list):
         _print("[ERROR] Unexpected Printify blueprints response shape (expected list)")
@@ -398,7 +398,7 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
     _print(f"[INFO] Found {len(profiles)} profile(s)")
 
     try:
-        blueprints = discover_blueprints(token, debug_http=debug_http)
+        blueprints = discover_blueprints(token, debug=debug, debug_http=debug_http)
     except PrintifyRequestError:
         _print(f"Updated 0 profile(s) in {profiles_path}")
         return 1
