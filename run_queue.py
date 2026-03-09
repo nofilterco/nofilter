@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
 
 from catalog_assets import build_placeholder_asset
 from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
@@ -107,18 +110,34 @@ def mark_review(status: str, ids: list[str] | None = None) -> int:
     return updated
 
 
-def publish_approved(limit: int = 0) -> int:
+def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "") -> int:
     rows = load_rows()
+    idx = catalog_indexes(load_catalog())
     count = 0
     for row in rows:
         if row["status"] != "APPROVED":
             continue
-        resolve_variants(row)
+        profile = idx["profiles"].get(row.get("product_profile_id", ""), {})
+        resolve_profile(row, profile)
+        resolve_variants(row, profile)
         try:
-            publish_listing(row)
-            row["published_at"] = now_iso()
-            row["pipeline_stage"] = "PUBLISHED"
+            if not json.loads(row.get("enabled_variant_ids_json") or "[]"):
+                raise RuntimeError(row.get("error_message") or "No enabled variant ids resolved")
+            publish_listing(row, dry_run=dry_run)
+            if debug_title and row.get("title") == debug_title:
+                print(f"DEBUG_PAYLOAD[{debug_title}]={row.get('_last_printify_payload', '{}')}")
+            if dry_run:
+                row["pipeline_stage"] = "PUBLISH_DRY_RUN"
+            elif row.get("printify_product_id"):
+                row["status"] = "PUBLISHED"
+                row["published_at"] = now_iso()
+                row["pipeline_stage"] = "PUBLISHED"
+                row["error_stage"] = ""
+                row["error_message"] = ""
+            else:
+                raise RuntimeError(row.get("error_message") or "Create product succeeded without printify_product_id")
         except Exception as exc:
+            row["pipeline_stage"] = "PUBLISH_FAILED"
             row["error_stage"] = "PUBLISH"
             row["error_message"] = str(exc)
         count += 1
@@ -129,6 +148,7 @@ def publish_approved(limit: int = 0) -> int:
 
 
 def main() -> None:
+    load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
     p = argparse.ArgumentParser(description="Crafted Occasion catalog queue runner")
     p.add_argument("--seed-launch", action="store_true")
     p.add_argument("--collection", default="")
@@ -137,6 +157,8 @@ def main() -> None:
     p.add_argument("--approve-all", action="store_true")
     p.add_argument("--reject-all", action="store_true")
     p.add_argument("--publish-approved", action="store_true")
+    p.add_argument("--dry-run", action="store_true", help="Build publish payloads without calling Printify")
+    p.add_argument("--debug-payload-title", default="", help="Print final create_product payload for a listing title")
     p.add_argument("--export-report", action="store_true")
     args = p.parse_args()
 
@@ -149,7 +171,7 @@ def main() -> None:
     if args.reject_all:
         print(f"rejected={mark_review('REJECTED')}")
     if args.publish_approved:
-        print(f"published={publish_approved()}")
+        print(f"published={publish_approved(dry_run=args.dry_run, debug_title=args.debug_payload_title)}")
     if args.export_report:
         print(f"report={dump_launch_report()}")
 
