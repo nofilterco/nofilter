@@ -130,18 +130,6 @@ def providers_for_blueprint(token: str, blueprint_id: int, *, debug: bool = Fals
     return [p for p in data if isinstance(p, dict)]
 
 
-def provider_detail(token: str, blueprint_id: int, provider_id: int, *, debug: bool = False) -> dict[str, Any]:
-    data = _request_json(
-        token,
-        f"/catalog/blueprints/{blueprint_id}/print_providers/{provider_id}.json",
-        debug=debug,
-    )
-    if not isinstance(data, dict):
-        _print(f"[ERROR] Unexpected provider detail response for provider {provider_id}")
-        return {}
-    return data
-
-
 def variants_for(token: str, blueprint_id: int, provider_id: int, *, debug: bool = False) -> list[dict[str, Any]]:
     data = _request_json(
         token,
@@ -248,6 +236,55 @@ def _variant_match_count(variants: list[dict[str, Any]], wanted_colors: set[str]
     return len(matches), matches
 
 
+def _blueprint_preference_score(profile_id: str, blueprint: dict[str, Any]) -> int:
+    title = _norm(blueprint.get("title"))
+    brand = _norm(blueprint.get("brand"))
+    model = _norm(blueprint.get("model"))
+    text = " ".join([title, brand, model])
+
+    if profile_id == "youth_tee_g5000b":
+        score = 0
+        if "g5000b" in text:
+            score += 6
+        if "youth" in text:
+            score += 4
+        return score
+
+    if profile_id == "adult_tee_g5000":
+        score = 0
+        if "g5000" in text and "g5000b" not in text:
+            score += 6
+        if "adult" in text:
+            score += 2
+        if "youth" in text:
+            score -= 4
+        return score
+
+    if profile_id == "mug_orca_color":
+        score = 0
+        if "orca" in text:
+            score += 6
+        if "mug" in text:
+            score += 3
+        if "color" in text or "colorful" in text:
+            score += 2
+        return score
+
+    if profile_id == "tote_liberty_canvas":
+        score = 0
+        if "liberty" in text:
+            score += 5
+        if "bags" in text:
+            score += 2
+        if "canvas" in text:
+            score += 3
+        if "tote" in text:
+            score += 3
+        return score
+
+    return 0
+
+
 def resolve_targets(profile: dict[str, Any], blueprints: list[dict[str, Any]], *, debug: bool = False) -> list[dict[str, Any]]:
     hints = profile.get("printify_blueprint_hints") if isinstance(profile.get("printify_blueprint_hints"), dict) else {}
     model_hint = str(hints.get("model", "")).strip().lower()
@@ -316,11 +353,12 @@ def run(write_variants: bool, debug: bool) -> int:
             wanted_colors = {_norm(c) for c in profile.get("launch_visible_colors", []) if isinstance(c, (str, int, float))}
             wanted_sizes = {_norm(s) for s in profile.get("launch_visible_sizes", []) if isinstance(s, (str, int, float))}
 
-            best: tuple[int, dict[str, Any], dict[str, Any], list[dict[str, Any]]] | None = None
+            best: tuple[int, int, dict[str, Any], dict[str, Any], list[dict[str, Any]]] | None = None
             for bp in candidates:
                 bp_id = bp.get("id")
                 if not isinstance(bp_id, int):
                     continue
+                preference = _blueprint_preference_score(str(profile_id), bp)
                 providers = providers_for_blueprint(token, bp_id, debug=debug)
                 _debug(debug, f"Profile {profile_id} blueprint {bp_id} provider count: {len(providers)}")
                 if not providers:
@@ -330,22 +368,28 @@ def run(write_variants: bool, debug: bool) -> int:
                     provider_id = provider.get("id")
                     if not isinstance(provider_id, int):
                         continue
-                    _ = provider_detail(token, bp_id, provider_id, debug=debug)
-                    variants = variants_for(token, bp_id, provider_id, debug=debug)
+                    try:
+                        variants = variants_for(token, bp_id, provider_id, debug=debug)
+                    except PrintifyRequestError:
+                        _print(
+                            f"[WARN] {profile_id}: variants lookup failed for blueprint={bp_id} provider={provider_id}; continuing"
+                        )
+                        continue
                     count, matched = _variant_match_count(variants, wanted_colors, wanted_sizes)
-                    candidate = (count, bp, provider, matched)
-                    if best is None or candidate[0] > best[0]:
+                    candidate = (count, preference, bp, provider, matched)
+                    if best is None or (candidate[0], candidate[1]) > (best[0], best[1]):
                         best = candidate
 
             if best is None:
                 _print(f"[WARN] {profile_id}: no provider matches")
                 continue
 
-            matched_count, best_bp, best_provider, matched_variants = best
+            matched_count, _, best_bp, best_provider, matched_variants = best
             _debug(
                 debug,
-                f"Profile {profile_id} best provider {best_provider.get('id')} matched variant count: {matched_count}",
+                f"Profile {profile_id} best provider selected: {best_provider.get('id')} (blueprint={best_bp.get('id')})",
             )
+            _debug(debug, f"Profile {profile_id} matched variant count: {matched_count}")
 
             if matched_count == 0:
                 _print(f"[WARN] {profile_id}: no matching variants")
@@ -374,6 +418,10 @@ def run(write_variants: bool, debug: bool) -> int:
             _print(
                 f"[OK] {profile_id}: blueprint_id={hints['blueprint_id']} provider_id={hints['provider_id']} "
                 f"(matched_variants={matched_count})"
+            )
+            _debug(
+                debug,
+                f"Profile {profile_id} final selection: blueprint_id={hints['blueprint_id']} provider_id={hints['provider_id']}",
             )
         except PrintifyRequestError:
             _print(f"[ERROR] {profile_id}: request failed")
