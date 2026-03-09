@@ -1,0 +1,52 @@
+listing_templates:
+  - slug: milestones-est-template
+    collection_slug: family-milestones
+    status: ready
+    product_profile_id: adult_tee_g5000
+    title_template: "{{role}} Est. Personalized {{product_type}}"
+    seo_title_template: "{{role}} Est. Personalized Gift | Crafted Occasion"
+    description_template: "<p>Celebrate a family milestone with a personalized {{product_type}}.</p>"
+    tags: [crafted-occasion, personalized, family-milestones]
+    personalization_fields:
+      - {field_key: established_year, field_label: "Established Year", field_type: date, required: true, placeholder: "YYYY"}
+      - {field_key: family_name, field_label: "Family Name", field_type: text, max_length: 24, required: true, placeholder: "Smith"}
+    personalization_instructions: "Collect name/year in Shopify personalization and confirm spelling before fulfillment."
+    art_strategy: text-only
+    default_art_placeholder_text: "Family Name\nEst. YYYY"
+    publish_mode: personalized
+    shopify_collection_tags: [collection-family-milestones]
+    merchandising_keywords: [personalized gift, family milestone]
+  - slug: reunion-template
+    collection_slug: family-reunion
+    status: ready
+    product_profile_id: adult_tee_g5000
+    title_template: "Family Reunion Personalized T-Shirt"
+    seo_title_template: "Family Reunion Personalized Shirt | Crafted Occasion"
+    description_template: "<p>Custom reunion apparel for matching family moments.</p>"
+    tags: [crafted-occasion, family-reunion, reunion-shirt]
+    personalization_fields:
+      - {field_key: family_name, field_label: "Family Name", field_type: text, max_length: 24, required: true, placeholder: "Johnson"}
+      - {field_key: reunion_year, field_label: "Reunion Year", field_type: date, required: true, placeholder: "2026"}
+    personalization_instructions: "Confirm family name and year before approving order."
+    art_strategy: text-only
+    default_art_placeholder_text: "Family Reunion\nName + Year"
+    publish_mode: both
+    shopify_collection_tags: [collection-family-reunion]
+    merchandising_keywords: [family reunion, matching shirts]
+  - slug: wedding-template
+    collection_slug: wedding-bridal
+    status: ready
+    product_profile_id: adult_tee_g5000
+    title_template: "Bride Est. Personalized T-Shirt"
+    seo_title_template: "Bride Est. Personalized Wedding Shirt | Crafted Occasion"
+    description_template: "<p>Celebrate engagement and wedding milestones with custom apparel.</p>"
+    tags: [crafted-occasion, wedding-bridal, bride]
+    personalization_fields:
+      - {field_key: wedding_date, field_label: "Wedding Date", field_type: date, required: true, placeholder: "MM/DD/YYYY"}
+      - {field_key: last_name, field_label: "Last Name", field_type: text, max_length: 24, required: true, placeholder: "Parker"}
+    personalization_instructions: "Manual Personalization Hub setup required after publishing."
+    art_strategy: monogram
+    default_art_placeholder_text: "Bride Est.\nDate"
+    publish_mode: personalized
+    shopify_collection_tags: [collection-wedding-bridal]
+    merchandising_keywords: [wedding gift, bride shirt]
