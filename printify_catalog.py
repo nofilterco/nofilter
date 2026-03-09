@@ -65,3 +65,8 @@ def upload_image(file_name: str, *, url: str = "", local_path: str = "") -> dict
 
 def publish_product(shop_id: str, product_id: str) -> dict[str, Any]:
     return _post(f"/shops/{shop_id}/products/{product_id}/publish.json", {"title": True, "description": True, "images": True, "variants": True, "tags": True})
+
+
+def get_product(shop_id: str, product_id: str) -> dict[str, Any]:
+    data = _get(f"/shops/{shop_id}/products/{product_id}.json")
+    return data if isinstance(data, dict) else {}

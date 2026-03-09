@@ -9,7 +9,7 @@ from typing import Any
 QUEUE_PATH = Path("queue.csv")
 
 NEW_SCHEMA = [
-    "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup"
+    "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup","printify_publish_status","shopify_sync_status","last_publish_response","last_sync_check_at"
 ]
 
 
@@ -41,6 +41,10 @@ def migrate_if_needed() -> None:
         n["description_html"] = row.get("description") or ""
         n["tags_csv"] = row.get("tags") or ""
         n["debug_trace"] = "legacy-row-imported"
+        n["show_all_variants"] = "NO"
+        n["in_stock_only"] = "YES"
+        n["printify_publish_status"] = "not_attempted"
+        n["shopify_sync_status"] = "not_checked"
         migrated.append(n)
     _write(migrated)
 
