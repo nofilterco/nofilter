@@ -9,7 +9,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from printify_catalog import PrintifyAPIError, create_product, get_product, publish_product as printify_publish, upload_image
-from shopify_helper import find_product_id_by_title
+from shopify_helper import find_product_by_handle, find_product_id_by_title
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
@@ -28,6 +28,21 @@ def resolve_profile(row: dict[str, str], profile: dict[str, Any]) -> dict[str, A
     if not row.get("printify_provider_id"):
         row["printify_provider_id"] = str(hints.get("provider_id", ""))
     row["_placeholder_print_position"] = profile.get("placeholder_print_position", "front")
+    if row.get("product_family") == "tote":
+        unresolved = []
+        if not row.get("printify_blueprint_id"):
+            unresolved.append("blueprint")
+        if not row.get("printify_provider_id"):
+            unresolved.append("provider")
+        matched = ((profile.get("full_catalog_metadata") or {}).get("matched_variant_ids") or []) if isinstance(profile, dict) else []
+        if not matched:
+            unresolved.append("variants")
+        if unresolved:
+            row["launch_status"] = "BLOCKED_PROFILE"
+            row["error_stage"] = "PROFILE"
+            row["printify_publish_status"] = "blocked_profile_unresolved"
+            row["shopify_sync_status"] = "blocked_profile"
+            row["error_message"] = f"Unresolved tote profile metadata: missing {', '.join(unresolved)}."
     return row
 
 
@@ -119,19 +134,26 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
 def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
     row["last_sync_check_at"] = now_iso()
     if not row.get("printify_product_id"):
-        row["shopify_sync_status"] = "missing_printify_product_id"
+        row["shopify_sync_status"] = "sync_failed"
         return
     try:
         product = get_product(shop_id, row["printify_product_id"])
         visible = bool(product.get("visible"))
-        row["shopify_sync_status"] = "printify_published" if visible else "printify_created"
+        row["shopify_sync_status"] = "sync_pending" if visible else "printify_created"
     except Exception:
-        row["shopify_sync_status"] = "sync_check_failed"
+        row["shopify_sync_status"] = "sync_failed"
 
-    shopify_id = find_product_id_by_title(row.get("title", ""))
+    shopify_id = row.get("shopify_product_id") or ""
+    if not shopify_id and row.get("shopify_handle"):
+        product = find_product_by_handle(row.get("shopify_handle", ""))
+        shopify_id = str(product.get("id", ""))
+        if product.get("handle"):
+            row["shopify_handle"] = str(product["handle"])
+    if not shopify_id:
+        shopify_id = find_product_id_by_title(row.get("title", ""))
     if shopify_id:
         row["shopify_product_id"] = shopify_id
-        row["shopify_sync_status"] = "shopify_product_resolved"
+        row["shopify_sync_status"] = "synced_to_shopify"
 
 
 
@@ -139,7 +161,7 @@ def recheck_sync_for_row(row: dict[str, str]) -> dict[str, str]:
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "")
     row["last_sync_check_at"] = now_iso()
     if not shop_id:
-        row["shopify_sync_status"] = "sync_check_failed"
+        row["shopify_sync_status"] = "sync_failed"
         row["error_stage"] = row.get("error_stage") or "CONFIG"
         row["error_message"] = row.get("error_message") or "PRINTIFY_SHOP_ID missing for sync check"
         return row
@@ -147,11 +169,12 @@ def recheck_sync_for_row(row: dict[str, str]) -> dict[str, str]:
     return row
 
 def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, str]:
-    if row.get("product_family") == "tote":
-        row["error_stage"] = "PUBLISH"
-        row["error_message"] = "Tote publishing blocked: profile unresolved. Blueprint/provider/variant IDs are required before publish."
+    if row.get("launch_status") == "BLOCKED_PROFILE" or row.get("product_family") == "tote":
+        row["error_stage"] = row.get("error_stage") or "PROFILE"
+        row["launch_status"] = "BLOCKED_PROFILE"
+        row["error_message"] = row.get("error_message") or "Tote publishing blocked: unresolved blueprint/provider/variant profile metadata."
         row["printify_publish_status"] = "blocked_profile_unresolved"
-        row["shopify_sync_status"] = "blocked"
+        row["shopify_sync_status"] = "blocked_profile"
         return row
 
     payload = build_printify_payload(row)

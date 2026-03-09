@@ -84,8 +84,7 @@ def build_seo_title(listing: dict[str, Any], template: dict[str, Any] | None = N
 
 def build_description_html(listing: dict[str, Any], template: dict[str, Any] | None = None) -> str:
     template = template or {}
-    if listing.get("exact_html_description"):
-        return str(listing["exact_html_description"])
+    exact_html = str(listing.get("exact_html_description") or "").strip()
 
     product = _product_phrase(listing.get("product_profile_id") or template.get("product_profile_id") or "")
     collection = (listing.get("collection_slug") or template.get("collection_slug") or "special occasions").replace("-", " ")
@@ -95,8 +94,9 @@ def build_description_html(listing: dict[str, Any], template: dict[str, Any] | N
 
     role = _role_phrase(listing, template)
     role_text = f" for {role.lower()}" if role else ""
-    html = [f"<p>This personalized {product.lower()}{role_text} is designed for {collection} celebrations and meaningful gifting. Customize with {details} for a polished, event-ready keepsake.</p>"]
-    if bullets:
+    base_paragraph = exact_html if exact_html else f"<p>This personalized {product.lower()}{role_text} is designed for {collection} celebrations and meaningful gifting. Customize with {details} for a polished, event-ready keepsake.</p>"
+    html = [base_paragraph]
+    if bullets and "<li>" not in base_paragraph.lower():
         html.append("<ul>" + "".join([f"<li>{b}</li>" for b in bullets[:3]]) + "</ul>")
     return "".join(html)
 
@@ -104,17 +104,15 @@ def build_description_html(listing: dict[str, Any], template: dict[str, Any] | N
 def build_tags_csv(listing: dict[str, Any], collection: dict[str, Any], template: dict[str, Any] | None = None, profile: dict[str, Any] | None = None) -> str:
     template = template or {}
     profile = profile or {}
-    seeds: list[str] = []
-    seeds.extend(listing.get("exact_tags") or [])
-    seeds.extend(template.get("tags") or [])
-    seeds.extend(template.get("seo_keywords") or [])
-    seeds.extend(template.get("merchandising_keywords") or [])
-    seeds.extend([collection.get("shopify_tag", ""), collection.get("slug", "")])
-    seeds.extend([profile.get("product_family", ""), "gift", "personalized"])
-    seeds.extend(collection.get("default_keywords") or [])
-    role = _role_phrase(listing, template)
-    if role:
+    seeds: list[str] = list(listing.get("exact_tags") or [])
+    title = str(listing.get("exact_title") or listing.get("title_template") or "").lower()
+    role = _role_phrase(listing, template).lower()
+    seeds.extend([collection.get("shopify_tag", ""), collection.get("slug", ""), profile.get("product_family", ""), "personalized", "gift"])
+    if role and role in title:
         seeds.append(role)
+    for token in ["bridesmaid", "maid of honor", "bride crew", "groom crew", "bach weekend"]:
+        if token in title:
+            seeds.append(token)
     if (template.get("supports_text_edit") is True) or (listing.get("personalization_fields") or template.get("personalization_fields")):
         seeds.append("customizable")
     for field in (listing.get("personalization_fields") or template.get("personalization_fields") or []):

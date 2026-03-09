@@ -91,6 +91,9 @@ def dump_launch_report(path: str = "launch_report.json") -> str:
         "collection": r["collection_slug"], "title": r["title"], "seo_title": r["seo_title"], "description_html": r["description_html"], "tags": r["tags_csv"],
         "sizes": json.loads(r["enabled_sizes_json"] or "[]"), "colors": json.loads(r["enabled_colors_json"] or "[]"),
         "profile": r["product_profile_id"], "status": r["status"], "stock_mode": "in_stock_only" if (r.get("in_stock_only") == "YES") else "all_variants",
+        "template_family": r.get("template_family", ""),
+        "placeholder_art_mode": r.get("placeholder_art_mode", ""),
+        "launch_status": r.get("launch_status", ""),
         "personalization_capability_summary": {
             "template_family": r.get("template_family", ""),
             "text": bool(json.loads(r.get("text_fields_json") or "[]")),
@@ -108,7 +111,7 @@ def dump_launch_report(path: str = "launch_report.json") -> str:
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv") -> str:
     rows = load_rows()
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "in_stock_only", "show_all_variants"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "placeholder_art_mode", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "in_stock_only", "show_all_variants"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

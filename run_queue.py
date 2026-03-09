@@ -8,13 +8,13 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from catalog_assets import build_placeholder_asset
+from catalog_assets import build_placeholder_asset, default_placeholder_text, resolve_art_strategy
 from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
 from catalog_config import catalog_indexes, load_catalog
 from catalog_queue import append_rows, dump_launch_report, dump_ops_review_csv, load_rows, next_id, save_rows
 from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants
 
-REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "PUBLISHED_TO_PRINTIFY", "SYNCED_TO_SHOPIFY", "MANUAL_PERSONALIZATION_REQUIRED", "PUBLISH_FAILED", "SYNC_FAILED"]
+REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "BLOCKED_PROFILE", "PUBLISHED_TO_PRINTIFY", "SYNC_PENDING", "SYNCED_TO_SHOPIFY", "MANUAL_PERSONALIZATION_REQUIRED", "PUBLISH_FAILED", "SYNC_FAILED"]
 
 
 def now_iso() -> str:
@@ -25,6 +25,17 @@ def _append_publish_log(row: dict[str, Any], event: str, detail: str = "") -> No
     logs = json.loads(row.get("publish_log_history_json") or "[]")
     logs.append({"ts": now_iso(), "event": event, "detail": detail[:500]})
     row["publish_log_history_json"] = json.dumps(logs[-30:])
+
+
+def _buyer_schema_for_listing(item: dict[str, Any], tpl: dict[str, Any], placeholder_text: str) -> dict[str, Any]:
+    text_fields = item.get("personalization_fields") or tpl.get("personalization_fields") or []
+    return {
+        "text_fields": text_fields,
+        "image_fields": item.get("image_upload_fields") or tpl.get("image_upload_fields") or [],
+        "logo_fields": item.get("logo_upload_fields") or tpl.get("logo_upload_fields") or [],
+        "helper_text": tpl.get("personalization_instructions", ""),
+        "placeholder_preview": placeholder_text,
+    }
 
 
 def seed_listings(from_launch_plan: bool = True, collection: str = "", family: str = "") -> int:
@@ -49,6 +60,8 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
         tpl = idx["templates"].get(item.get("listing_template_id", ""), {})
         row = {k: "" for k in load_rows()[0].keys()} if rows else {}
         pf = profile.get("product_family", "")
+        strategy = resolve_art_strategy(item.get("template_family", tpl.get("template_family", "text_only")), slug, profile.get("product_family", ""))
+        preview_text = default_placeholder_text(slug, item.get("template_family", tpl.get("template_family", "text_only")))
         row.update({
             "id": str(start + len(out)), "status": "DRAFT", "pipeline_stage": "SEEDED", "store_brand": "Crafted Occasion",
             "collection_slug": coll_slug, "collection_title": coll["title"], "shopify_collection_tag": coll["shopify_tag"],
@@ -59,12 +72,12 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "image_upload_fields_json": json.dumps(item.get("image_upload_fields", tpl.get("image_upload_fields", []))),
             "logo_upload_fields_json": json.dumps(item.get("logo_upload_fields", tpl.get("logo_upload_fields", []))),
             "text_fields_json": json.dumps(item.get("text_fields", tpl.get("text_fields", []))),
-            "buyer_personalization_schema_json": json.dumps(tpl.get("buyer_personalization_schema", {})),
-            "internal_workflow_metadata_json": json.dumps(tpl.get("internal_workflow_metadata", {})),
+            "buyer_personalization_schema_json": json.dumps(_buyer_schema_for_listing(item, tpl, preview_text)),
+            "internal_workflow_metadata_json": json.dumps({**tpl.get("internal_workflow_metadata", {}), "art_strategy": strategy}),
             "personalization_instructions": tpl.get("personalization_instructions", "Manual personalization review may be required."),
             "title": build_title(item, tpl), "seo_title": build_seo_title(item, tpl), "description_html": build_description_html(item, tpl),
             "tags_csv": build_tags_csv(item, coll, tpl, profile), "shopify_tags_csv": coll["shopify_tag"],
-            "placeholder_art_mode": tpl.get("art_strategy", "stacked_text"), "placeholder_art_text": tpl.get("default_art_placeholder_text", "Custom Text"),
+            "placeholder_art_mode": strategy, "placeholder_art_text": preview_text,
             "enabled_sizes_json": json.dumps(item.get("launch_visible_sizes", profile.get("launch_visible_sizes", []))),
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", []))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
@@ -73,6 +86,10 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "publish_log_history_json": json.dumps([{"ts": now_iso(), "event": "SEEDED", "detail": slug}]), "debug_trace": f"{now_iso()}:seeded",
         })
         resolve_profile(row, profile)
+        if row.get("launch_status") == "BLOCKED_PROFILE":
+            row["status"] = "BLOCKED_PROFILE"
+            row["pipeline_stage"] = "PROFILE_BLOCKED"
+            _append_publish_log(row, "PROFILE_BLOCKED", row.get("error_message", ""))
         out.append(row)
     append_rows(out)
     return len(out)
@@ -107,11 +124,13 @@ def recheck_sync(ids: list[str] | None = None) -> int:
     for row in rows:
         if ids and row["id"] not in ids: continue
         recheck_sync_for_row(row)
-        if row.get("shopify_sync_status") == "shopify_product_resolved":
+        if row.get("shopify_sync_status") == "synced_to_shopify":
             row["launch_status"] = "SYNCED_TO_SHOPIFY"
             if row.get("status") == "PUBLISHED_TO_PRINTIFY": row["status"] = "SYNCED_TO_SHOPIFY"
-        elif "failed" in (row.get("shopify_sync_status") or ""):
+        elif row.get("shopify_sync_status") == "sync_failed":
             row["launch_status"] = "SYNC_FAILED"; row["status"] = "SYNC_FAILED"
+        elif row.get("shopify_sync_status") in {"sync_pending", "printify_published"}:
+            row["launch_status"] = "SYNC_PENDING"
         _append_publish_log(row, "SYNC_RECHECK", row.get("shopify_sync_status", "")); checked += 1
     save_rows(rows); return checked
 
@@ -137,7 +156,9 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
             if dry_run: row["pipeline_stage"] = "PUBLISH_DRY_RUN"
             elif row.get("printify_publish_status") == "published":
                 row["published_at"] = now_iso(); row["pipeline_stage"] = "PUBLISHED"; row["status"] = "PUBLISHED_TO_PRINTIFY"; row["launch_status"] = "PUBLISHED_TO_PRINTIFY"
-                if row.get("shopify_sync_status") == "shopify_product_resolved": row["status"] = "SYNCED_TO_SHOPIFY"; row["launch_status"] = "SYNCED_TO_SHOPIFY"
+                if row.get("shopify_sync_status") == "synced_to_shopify": row["status"] = "SYNCED_TO_SHOPIFY"; row["launch_status"] = "SYNCED_TO_SHOPIFY"
+                elif row.get("shopify_sync_status") in {"sync_pending", "printify_published"}: row["launch_status"] = "SYNC_PENDING"
+                elif row.get("shopify_sync_status") == "sync_failed": row["launch_status"] = "SYNC_FAILED"; row["status"] = "SYNC_FAILED"
                 if row.get("needs_manual_personalization_setup") == "YES" and row.get("status") != "SYNCED_TO_SHOPIFY": row["launch_status"] = "MANUAL_PERSONALIZATION_REQUIRED"
             else:
                 row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"; row["error_stage"] = row.get("error_stage") or "PUBLISH"
