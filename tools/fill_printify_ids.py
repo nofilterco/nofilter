@@ -59,9 +59,9 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 
-def _request_json(token: str, path: str, *, debug: bool = False) -> Any:
+def _request_json(token: str, path: str, *, debug_http: bool = False) -> Any:
     url = f"{BASE}{path}"
-    _debug(debug, f"GET {path}")
+    _debug(debug_http, f"GET {path}")
     try:
         response = requests.get(url, headers=_headers(token), timeout=30)
     except requests.RequestException as exc:
@@ -113,8 +113,8 @@ def load_profiles(path: Path, *, debug: bool = False) -> tuple[dict[str, Any], l
     return raw, profiles
 
 
-def discover_blueprints(token: str, *, debug: bool = False) -> list[dict[str, Any]]:
-    data = _request_json(token, "/catalog/blueprints.json", debug=debug)
+def discover_blueprints(token: str, *, debug_http: bool = False) -> list[dict[str, Any]]:
+    data = _request_json(token, "/catalog/blueprints.json", debug_http=debug_http)
     if not isinstance(data, list):
         _print("[ERROR] Unexpected Printify blueprints response shape (expected list)")
         return []
@@ -122,19 +122,19 @@ def discover_blueprints(token: str, *, debug: bool = False) -> list[dict[str, An
     return [b for b in data if isinstance(b, dict)]
 
 
-def providers_for_blueprint(token: str, blueprint_id: int, *, debug: bool = False) -> list[dict[str, Any]]:
-    data = _request_json(token, f"/catalog/blueprints/{blueprint_id}/print_providers.json", debug=debug)
+def providers_for_blueprint(token: str, blueprint_id: int, *, debug_http: bool = False) -> list[dict[str, Any]]:
+    data = _request_json(token, f"/catalog/blueprints/{blueprint_id}/print_providers.json", debug_http=debug_http)
     if not isinstance(data, list):
         _print(f"[ERROR] Unexpected providers response for blueprint {blueprint_id} (expected list)")
         return []
     return [p for p in data if isinstance(p, dict)]
 
 
-def variants_for(token: str, blueprint_id: int, provider_id: int, *, debug: bool = False) -> list[dict[str, Any]]:
+def variants_for(token: str, blueprint_id: int, provider_id: int, *, debug_http: bool = False) -> list[dict[str, Any]]:
     data = _request_json(
         token,
         f"/catalog/blueprints/{blueprint_id}/print_providers/{provider_id}/variants.json",
-        debug=debug,
+        debug_http=debug_http,
     )
     if isinstance(data, dict):
         variants = data.get("variants", [])
@@ -245,78 +245,141 @@ def _blueprint_preference_score(profile_id: str, blueprint: dict[str, Any]) -> i
     if profile_id == "youth_tee_g5000b":
         score = 0
         if "g5000b" in text:
-            score += 6
+            score += 40
         if "youth" in text:
-            score += 4
+            score += 24
+        if "g5000" in text:
+            score += 10
+        if "adult" in text:
+            score -= 16
         return score
 
     if profile_id == "adult_tee_g5000":
         score = 0
         if "g5000" in text and "g5000b" not in text:
-            score += 6
+            score += 38
         if "adult" in text:
-            score += 2
+            score += 10
         if "youth" in text:
-            score -= 4
+            score -= 20
+        return score
+
+    if profile_id == "crewneck_g18000":
+        score = 0
+        if "g18000" in text:
+            score += 40
+        if "crewneck" in text or "sweatshirt" in text:
+            score += 18
+        if "hoodie" in text:
+            score -= 12
+        return score
+
+    if profile_id == "hoodie_g18500":
+        score = 0
+        if "g18500" in text:
+            score += 40
+        if "hoodie" in text:
+            score += 18
+        if "crewneck" in text or "sweatshirt" in text:
+            score -= 10
         return score
 
     if profile_id == "mug_orca_color":
         score = 0
         if "orca" in text:
-            score += 6
+            score += 35
         if "mug" in text:
-            score += 3
-        if "color" in text or "colorful" in text:
-            score += 2
+            score += 18
+        if any(word in text for word in ("color", "colorful", "accent")):
+            score += 14
         return score
 
     if profile_id == "tote_liberty_canvas":
         score = 0
         if "liberty" in text:
-            score += 5
+            score += 35
         if "bags" in text:
-            score += 2
+            score += 8
         if "canvas" in text:
-            score += 3
+            score += 16
         if "tote" in text:
-            score += 3
+            score += 16
         return score
 
     return 0
 
 
-def resolve_targets(profile: dict[str, Any], blueprints: list[dict[str, Any]], *, debug: bool = False) -> list[dict[str, Any]]:
+def _is_exact_model_match(profile_id: str, blueprint: dict[str, Any]) -> bool:
+    text = " ".join([
+        _norm(blueprint.get("title")),
+        _norm(blueprint.get("brand")),
+        _norm(blueprint.get("model")),
+    ])
+    exact_markers = {
+        "youth_tee_g5000b": "g5000b",
+        "adult_tee_g5000": "g5000",
+        "crewneck_g18000": "g18000",
+        "hoodie_g18500": "g18500",
+        "mug_orca_color": "orca",
+        "tote_liberty_canvas": "liberty",
+    }
+    marker = exact_markers.get(profile_id)
+    if not marker:
+        return False
+    if profile_id == "adult_tee_g5000":
+        return marker in text and "g5000b" not in text
+    return marker in text
+
+
+def resolve_targets(
+    profile: dict[str, Any],
+    blueprints: list[dict[str, Any]],
+    *,
+    debug: bool = False,
+    max_blueprints_per_profile: int = 5,
+) -> tuple[list[dict[str, Any]], int]:
     hints = profile.get("printify_blueprint_hints") if isinstance(profile.get("printify_blueprint_hints"), dict) else {}
     model_hint = str(hints.get("model", "")).strip().lower()
     label = str(profile.get("brand_model_label", "")).strip().lower()
+    profile_id = str(profile.get("id", ""))
 
-    candidates: list[dict[str, Any]] = []
+    scored: list[tuple[int, dict[str, Any]]] = []
+    total_candidates = 0
     for bp in blueprints:
         title = str(bp.get("title", "")).strip().lower()
+        strong_hit = False
         if model_hint and model_hint in title:
-            candidates.append(bp)
-            continue
+            strong_hit = True
         if label and any(chunk and chunk in title for chunk in label.split()[:2]):
-            candidates.append(bp)
+            strong_hit = True
 
-    if not candidates:
-        # fallback: fuzzy by product family as a weak signal
+        if strong_hit:
+            total_candidates += 1
+            score = _blueprint_preference_score(profile_id, bp)
+            scored.append((score, bp))
+
+    if not scored:
         family = str(profile.get("product_family", "")).strip().lower()
         if family:
             for bp in blueprints:
                 title = str(bp.get("title", "")).strip().lower()
                 if family in title:
-                    candidates.append(bp)
+                    total_candidates += 1
+                    score = _blueprint_preference_score(profile_id, bp)
+                    scored.append((score, bp))
 
-    _debug(debug, f"Profile {profile.get('id')} blueprint candidates: {[c.get('id') for c in candidates]}")
-    return candidates
+    scored.sort(key=lambda x: x[0], reverse=True)
+    shortlisted = [bp for _, bp in scored[:max_blueprints_per_profile]]
+    _debug(debug, f"Profile {profile.get('id')} total blueprint candidates: {total_candidates}")
+    _debug(debug, f"Profile {profile.get('id')} shortlisted blueprint IDs: {[c.get('id') for c in shortlisted]}")
+    return shortlisted, total_candidates
 
 
 def _write_profiles(path: Path, data: dict[str, Any]) -> None:
     path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
 
-def run(write_variants: bool, debug: bool) -> int:
+def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_profile: int, max_providers_per_blueprint: int) -> int:
     profiles_path = DEFAULT_PROFILES_PATH
     _print(f"[INFO] Starting Printify profile resolver for {profiles_path}")
 
@@ -335,17 +398,24 @@ def run(write_variants: bool, debug: bool) -> int:
     _print(f"[INFO] Found {len(profiles)} profile(s)")
 
     try:
-        blueprints = discover_blueprints(token, debug=debug)
+        blueprints = discover_blueprints(token, debug_http=debug_http)
     except PrintifyRequestError:
         _print(f"Updated 0 profile(s) in {profiles_path}")
         return 1
 
     changed = 0
+    providers_cache: dict[int, list[dict[str, Any]]] = {}
+    variants_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
 
     for profile in profiles:
         profile_id = profile.get("id", "<unknown>")
         try:
-            candidates = resolve_targets(profile, blueprints, debug=debug)
+            candidates, _total_candidates = resolve_targets(
+                profile,
+                blueprints,
+                debug=debug,
+                max_blueprints_per_profile=max_blueprints_per_profile,
+            )
             if not candidates:
                 _print(f"[WARN] {profile_id}: no blueprint matches")
                 continue
@@ -354,13 +424,20 @@ def run(write_variants: bool, debug: bool) -> int:
             wanted_sizes = {_norm(s) for s in profile.get("launch_visible_sizes", []) if isinstance(s, (str, int, float))}
 
             best: tuple[int, int, dict[str, Any], dict[str, Any], list[dict[str, Any]]] | None = None
+            wanted_combo_count = max(1, len(wanted_colors) * len(wanted_sizes))
             for bp in candidates:
                 bp_id = bp.get("id")
                 if not isinstance(bp_id, int):
                     continue
                 preference = _blueprint_preference_score(str(profile_id), bp)
-                providers = providers_for_blueprint(token, bp_id, debug=debug)
-                _debug(debug, f"Profile {profile_id} blueprint {bp_id} provider count: {len(providers)}")
+                if bp_id in providers_cache:
+                    providers = providers_cache[bp_id]
+                else:
+                    providers = providers_for_blueprint(token, bp_id, debug_http=debug_http)
+                    providers_cache[bp_id] = providers
+                if max_providers_per_blueprint > 0:
+                    providers = providers[:max_providers_per_blueprint]
+                _debug(debug, f"Profile {profile_id} blueprint {bp_id} provider count evaluated: {len(providers)}")
                 if not providers:
                     continue
 
@@ -368,8 +445,13 @@ def run(write_variants: bool, debug: bool) -> int:
                     provider_id = provider.get("id")
                     if not isinstance(provider_id, int):
                         continue
+                    key = (bp_id, provider_id)
                     try:
-                        variants = variants_for(token, bp_id, provider_id, debug=debug)
+                        if key in variants_cache:
+                            variants = variants_cache[key]
+                        else:
+                            variants = variants_for(token, bp_id, provider_id, debug_http=debug_http)
+                            variants_cache[key] = variants
                     except PrintifyRequestError:
                         _print(
                             f"[WARN] {profile_id}: variants lookup failed for blueprint={bp_id} provider={provider_id}; continuing"
@@ -379,6 +461,15 @@ def run(write_variants: bool, debug: bool) -> int:
                     candidate = (count, preference, bp, provider, matched)
                     if best is None or (candidate[0], candidate[1]) > (best[0], best[1]):
                         best = candidate
+
+                if best is not None:
+                    best_count, _, best_bp, _best_provider, _best_matched = best
+                    if _is_exact_model_match(str(profile_id), best_bp) and best_count >= int(0.7 * wanted_combo_count):
+                        _debug(
+                            debug,
+                            f"Profile {profile_id} early exit on blueprint {best_bp.get('id')} with strong match coverage ({best_count}/{wanted_combo_count})",
+                        )
+                        break
 
             if best is None:
                 _print(f"[WARN] {profile_id}: no provider matches")
@@ -443,12 +534,21 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Fill Printify blueprint/provider IDs in catalog profiles")
     parser.add_argument("--write-variants", action="store_true", help="Also write matched Printify variant IDs")
     parser.add_argument("--debug", action="store_true", help="Print verbose diagnostics")
+    parser.add_argument("--debug-http", action="store_true", help="Print each HTTP request")
+    parser.add_argument("--max-blueprints-per-profile", type=int, default=5, help="Max shortlisted blueprints per profile")
+    parser.add_argument("--max-providers-per-blueprint", type=int, default=0, help="Optional cap for providers checked per blueprint (0=all)")
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    code = run(write_variants=args.write_variants, debug=args.debug)
+    code = run(
+        write_variants=args.write_variants,
+        debug=args.debug,
+        debug_http=args.debug_http,
+        max_blueprints_per_profile=max(1, args.max_blueprints_per_profile),
+        max_providers_per_blueprint=max(0, args.max_providers_per_blueprint),
+    )
     raise SystemExit(code)
 
 
