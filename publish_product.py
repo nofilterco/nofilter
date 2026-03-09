@@ -7,7 +7,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from printify_catalog import create_product, publish_product as printify_publish, upload_image
+from printify_catalog import PrintifyAPIError, create_product, publish_product as printify_publish, upload_image
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
@@ -36,9 +36,11 @@ def resolve_variants(row: dict[str, str], profile: dict[str, Any]) -> dict[str, 
     parsed_ids = [int(v) for v in ids if str(v).strip().isdigit()]
 
     variant_records = meta.get("matched_variants") or meta.get("variants") or []
+    enabled_sizes = set(json.loads(row.get("enabled_sizes_json") or "[]"))
+    enabled_colors = set(json.loads(row.get("enabled_colors_json") or "[]"))
+    in_stock_only = (row.get("in_stock_only") or "").upper() == "YES"
+
     if variant_records and parsed_ids:
-        enabled_sizes = set(json.loads(row.get("enabled_sizes_json") or "[]"))
-        enabled_colors = set(json.loads(row.get("enabled_colors_json") or "[]"))
         filtered: list[int] = []
         for item in variant_records:
             if not isinstance(item, dict):
@@ -49,7 +51,8 @@ def resolve_variants(row: dict[str, str], profile: dict[str, Any]) -> dict[str, 
             options = item.get("options") if isinstance(item.get("options"), dict) else {}
             size_ok = not enabled_sizes or options.get("size") in enabled_sizes
             color_ok = not enabled_colors or options.get("color") in enabled_colors
-            if size_ok and color_ok:
+            stock_ok = True if not in_stock_only else bool(item.get("is_available", item.get("is_enabled", True)))
+            if size_ok and color_ok and stock_ok:
                 filtered.append(vid)
         if filtered:
             parsed_ids = filtered
@@ -57,7 +60,7 @@ def resolve_variants(row: dict[str, str], profile: dict[str, Any]) -> dict[str, 
     row["enabled_variant_ids_json"] = json.dumps(parsed_ids)
     if not parsed_ids:
         row["error_stage"] = "PUBLISH"
-        row["error_message"] = "No Printify variant IDs resolved from profile metadata (full_catalog_metadata.matched_variant_ids)."
+        row["error_message"] = "No Printify variant IDs resolved from profile metadata using active size/color/stock rules."
     return row
 
 
@@ -86,7 +89,7 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
         raise ValueError("No enabled variant ids resolved; refusing to call Printify create_product")
     image_id = _ensure_printify_image_id(row)
     print_position = row.get("_placeholder_print_position") or "front"
-    return {
+    payload: dict[str, Any] = {
         "title": row["title"],
         "description": row["description_html"],
         "blueprint_id": int(row["printify_blueprint_id"] or 0),
@@ -101,22 +104,46 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
             }],
         }],
     }
+    sales_channel_collections = [v.strip() for v in (row.get("shopify_sales_channel_collections") or "").split(",") if v.strip()]
+    if sales_channel_collections:
+        payload["sales_channel_properties"] = {"shopify": {"collections": sales_channel_collections}}
+    return payload
 
 
 def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, str]:
+    if row.get("product_family") == "tote":
+        row["error_stage"] = "PUBLISH"
+        row["error_message"] = "Tote publishing blocked: provider/profile mapping not finalized."
+        return row
+
     payload = build_printify_payload(row)
     row["_last_printify_payload"] = json.dumps(payload, ensure_ascii=False)
     if dry_run:
         return row
+
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "")
     if not shop_id:
+        row["error_stage"] = "CONFIG"
         row["error_message"] = "PRINTIFY_SHOP_ID missing"
         return row
-    created = create_product(shop_id, payload)
-    row["printify_product_id"] = str(created.get("id", ""))
-    if row["publish_mode"] in ("personalized", "both"):
-        row["needs_manual_personalization_setup"] = "YES"
-    if row["printify_product_id"]:
-        printify_publish(shop_id, row["printify_product_id"])
-        row["status"] = "PUBLISHED"
+
+    try:
+        created = create_product(shop_id, payload)
+        row["printify_product_id"] = str(created.get("id", ""))
+        if row.get("publish_mode") in ("personalized", "both"):
+            row["needs_manual_personalization_setup"] = "YES"
+        if row["printify_product_id"]:
+            printify_publish(shop_id, row["printify_product_id"])
+            row["status"] = "PUBLISHED"
+            row["error_stage"] = ""
+            row["error_message"] = ""
+        else:
+            row["error_stage"] = "PUBLISH"
+            row["error_message"] = "Printify create_product returned no id"
+    except PrintifyAPIError as exc:
+        row["error_stage"] = "PRINTIFY_API"
+        row["error_message"] = str(exc)
+    except Exception as exc:
+        row["error_stage"] = "PUBLISH"
+        row["error_message"] = f"Unexpected publish error: {exc}"
     return row
