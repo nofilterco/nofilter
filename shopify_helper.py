@@ -40,3 +40,17 @@ def find_product_id_by_title(title: str) -> str:
     except Exception:
         return ""
     return ""
+
+
+def find_product_by_handle(handle: str) -> dict[str, Any]:
+    if not SHOP_URL or not TOKEN or not handle:
+        return {}
+    url = f"{_base_url()}/products.json"
+    params = {"handle": handle, "limit": 1, "fields": "id,title,handle"}
+    try:
+        resp = requests.get(url, headers=_headers(), params=params, timeout=30)
+        resp.raise_for_status()
+        products = resp.json().get("products", [])
+        return products[0] if products else {}
+    except Exception:
+        return {}

@@ -46,6 +46,50 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
 
 ICON_MAP = {"stars": "✦", "heart": "♥", "ring": "◌", "bow": "❦", "crest": "⬢", "laurel": "❧", "mug": "☕", "suitcase": "✈"}
 
+TEMPLATE_FAMILY_ART_STRATEGY = {
+    "text_only": "stacked_text",
+    "monogram_badge": "monogram_frame",
+    "text_plus_logo": "minimal_block",
+    "text_plus_photo": "script_nameplate",
+    "photo_keepsake": "script_nameplate",
+    "wrap_mug": "wrap_mug",
+}
+
+
+def resolve_art_strategy(template_family: str, listing_slug: str = "", product_family: str = "") -> str:
+    family = (template_family or "text_only").strip().lower()
+    slug = (listing_slug or "").lower()
+    product = (product_family or "").lower()
+    if family == "text_only" and ("bride" in slug or "maid" in slug or "wedding" in slug):
+        return "script_nameplate"
+    if family == "text_only" and product in {"mug"}:
+        return "stacked_text"
+    if family == "text_plus_photo" and product == "mug":
+        return "wrap_mug"
+    return TEMPLATE_FAMILY_ART_STRATEGY.get(family, "stacked_text")
+
+
+def default_placeholder_text(listing_slug: str, template_family: str) -> str:
+    slug = (listing_slug or "").lower()
+    family = (template_family or "text_only").lower()
+    if "bridesmaid" in slug:
+        return "Ava\nBridesmaid"
+    if "maid-of-honor" in slug:
+        return "Lily\nMaid of Honor"
+    if "bride-crew" in slug:
+        return "Bride Crew\nMiami 2026"
+    if "groom-crew" in slug:
+        return "Groom Crew\n2026"
+    if "bach-weekend" in slug:
+        return "Nashville\nBach Weekend"
+    if "tote" in slug:
+        return "Mia\nBridal Party Tote"
+    if family == "monogram_badge":
+        return "P\nWedding Crew"
+    if family == "wrap_mug":
+        return "Alex & Sam\n06.08.2026"
+    return "Custom Name\nEst. 2026"
+
 
 def _font(name: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     try:
