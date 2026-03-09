@@ -1,34 +1,33 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Crafted Occasion Dashboard</title>
 <style>
-body{font-family:Arial;max-width:1500px;margin:20px auto} button{margin:3px;padding:7px 10px}
+body{font-family:Arial;max-width:1600px;margin:20px auto} button{margin:3px;padding:7px 10px}
 select,input{margin:3px;padding:6px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 table{width:100%;font-size:12px;border-collapse:collapse}td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
 .wrap{max-height:560px;overflow:auto}.badge{padding:2px 8px;border-radius:10px;font-weight:bold;font-size:11px;color:#fff}
-.READY_FOR_REVIEW{background:#f0a202}.APPROVED{background:#2f7d32}.PUBLISHED_TO_PRINTIFY{background:#1967d2}.SYNCED_TO_SHOPIFY{background:#00796b}.PUBLISH_FAILED,.SYNC_FAILED{background:#c62828}.MANUAL_PERSONALIZATION_REQUIRED{background:#6a1b9a}
-.drawer{position:fixed;right:0;top:0;width:480px;height:100%;overflow:auto;background:#fff;border-left:1px solid #ddd;padding:12px;display:none}
+.READY_FOR_REVIEW{background:#f0a202}.APPROVED{background:#2f7d32}.PUBLISHED_TO_PRINTIFY{background:#1967d2}.SYNC_PENDING{background:#1565c0}.SYNCED_TO_SHOPIFY{background:#00796b}.BLOCKED_PROFILE{background:#5d4037}.PUBLISH_FAILED,.SYNC_FAILED{background:#c62828}.MANUAL_PERSONALIZATION_REQUIRED{background:#6a1b9a}
+.drawer{position:fixed;right:0;top:0;width:520px;height:100%;overflow:auto;background:#fff;border-left:1px solid #ddd;padding:12px;display:none}
 </style></head><body>
 <h1>Crafted Occasion Catalog Operations Dashboard</h1>
 <div class="toolbar">
 <select id="collection"><option value="">All collections</option><option>family-milestones</option><option>family-reunion</option><option>wedding-bridal</option><option>bridal-party</option></select>
 <select id="family"><option value="">All families</option><option>tee</option><option>crewneck</option><option>hoodie</option><option>mug</option><option>tote</option></select>
-<select id="statusf"><option value="">All statuses</option><option>DRAFT</option><option>READY_FOR_REVIEW</option><option>APPROVED</option><option>PUBLISHED_TO_PRINTIFY</option><option>SYNCED_TO_SHOPIFY</option><option>MANUAL_PERSONALIZATION_REQUIRED</option><option>PUBLISH_FAILED</option><option>SYNC_FAILED</option></select>
-<select id="ptype"><option value="">All personalization</option><option>text_only</option><option>text_plus_logo</option><option>text_plus_photo</option><option>photo_keepsake</option><option>monogram_badge</option><option>wrap_mug</option></select>
-<select id="manualf"><option value="">Manual setup: all</option><option value="YES">YES</option><option value="NO">NO</option></select>
+<select id="statusf"><option value="">All statuses</option><option>READY_FOR_REVIEW</option><option>APPROVED</option><option>PUBLISHED_TO_PRINTIFY</option><option>SYNC_PENDING</option><option>SYNCED_TO_SHOPIFY</option><option>MANUAL_PERSONALIZATION_REQUIRED</option><option>BLOCKED_PROFILE</option><option>PUBLISH_FAILED</option><option>SYNC_FAILED</option></select>
+<select id="statef"><option value="">State quick filter</option><option value="blocked">blocked</option><option value="manual">manual</option><option value="synced">synced</option></select>
 <input id="selectedId" placeholder="Row id" style="width:85px"/>
-<button onclick="post('/actions/seed',{collection:val('collection'),family:val('family')})">Seed</button><button onclick="post('/actions/assets',{})">Build Assets</button><button onclick="post('/actions/publish',{})">Publish</button><button onclick="post('/actions/export',{})">Export</button>
+<button onclick="post('/actions/seed',{collection:val('collection'),family:val('family')})">Seed</button><button onclick="post('/actions/assets',{})">Build Assets</button><button onclick="post('/actions/publish',{})">Publish</button><button onclick="post('/actions/recheck-sync',{})">Sync Recheck</button><button onclick="post('/actions/setup-packets',{})">Setup Packets</button><button onclick="post('/actions/export',{})">Export</button><button onclick="post('/actions/export-manual-setup',{})">Export Manual Only</button>
 </div>
 <pre id="result"></pre><div class="wrap"><table id="t"></table></div><div id="drawer" class="drawer"></div>
 <script>
-const cols=['id','status','collection_slug','product_family','template_family','listing_title','printify_publish_status','shopify_sync_status','needs_manual_personalization_setup','actions'];
+const cols=['id','status','collection_slug','product_family','template_family','listing_title','preview_style','shopify_sync_status','needs_manual_personalization_setup','actions'];
 let rows=[]; function val(id){return document.getElementById(id).value}
 async function post(url,data){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);await load();}
 function badge(s){return s?`<span class="badge ${s}">${s}</span>`:''}
-function rf(r){return (!val('collection')||r.collection_slug===val('collection'))&&(!val('family')||r.product_family===val('family'))&&(!val('statusf')||r.status===val('statusf'))&&(!val('ptype')||r.template_family===val('ptype'))&&(!val('manualf')||r.needs_manual_personalization_setup===val('manualf'));}
-function actions(r){return `<button onclick="rowAct('approve','${r.id}')">approve</button><button onclick="rowAct('reject','${r.id}')">reject</button><button onclick="rowAct('publish','${r.id}')">publish</button><button onclick="rowAct('sync','${r.id}')">recheck sync</button><button onclick="rowAct('export','${r.id}')">export row JSON</button><button onclick="detail('${r.id}')">details</button>`}
-async function rowAct(a,id){if(a==='approve') return post('/actions/approve',{ids:id}); if(a==='reject') return post('/actions/reject',{ids:id}); if(a==='sync') return post('/actions/recheck-sync',{ids:id}); if(a==='export') return post('/actions/export-row',{id}); if(a==='publish'){await post('/actions/publish',{});}}
-function c(r,k){if(k==='status') return badge(r.status||r.launch_status||''); if(k==='actions') return actions(r); return (r[k]||'').toString().slice(0,180)}
-function detail(id){const r=rows.find(x=>x.id===id);const d=document.getElementById('drawer');d.style.display='block';d.innerHTML=`<button onclick="document.getElementById('drawer').style.display='none'">close</button><h3>Row ${id}</h3><pre>${JSON.stringify(r,null,2)}</pre>`}
+function rf(r){const sf=val('statef');const st=(!val('statusf')||r.status===val('statusf')||r.launch_status===val('statusf'));const quick=(sf==='blocked'?(r.status==='BLOCKED_PROFILE'||r.launch_status==='BLOCKED_PROFILE'):sf==='manual'?(r.launch_status==='MANUAL_PERSONALIZATION_REQUIRED'):sf==='synced'?(r.shopify_sync_status==='SYNCED_TO_SHOPIFY'):true);return (!val('collection')||r.collection_slug===val('collection'))&&(!val('family')||r.product_family===val('family'))&&st&&quick;}
+function actions(r){return `<button onclick="rowAct('approve','${r.id}')">approve</button><button onclick="rowAct('reject','${r.id}')">reject</button><button onclick="rowAct('publish','${r.id}')">publish</button><button onclick="rowAct('sync','${r.id}')">sync</button><button onclick="rowAct('packet','${r.id}')">packet</button><button onclick="detail('${r.id}')">details</button>`}
+async function rowAct(a,id){if(a==='approve') return post('/actions/approve',{ids:id}); if(a==='reject') return post('/actions/reject',{ids:id}); if(a==='sync') return post('/actions/recheck-sync',{ids:id}); if(a==='packet') return post('/actions/setup-packets',{ids:id}); if(a==='publish'){await post('/actions/publish',{});}}
+function c(r,k){if(k==='status') return badge(r.status||r.launch_status||''); if(k==='actions') return actions(r); return (r[k]||'').toString().slice(0,200)}
+function detail(id){const r=rows.find(x=>x.id===id);const logs=JSON.parse(r.publish_log_history_json||'[]');const previews=JSON.parse(r.preview_artifacts_json||'{}');const d=document.getElementById('drawer');d.style.display='block';d.innerHTML=`<button onclick="document.getElementById('drawer').style.display='none'">close</button><h3>Row ${id}</h3><h4>Buyer personalization schema</h4><pre>${r.buyer_personalization_schema_json||''}</pre><h4>Internal workflow metadata</h4><pre>${r.internal_workflow_metadata_json||''}</pre><h4>Publish logs</h4><pre>${JSON.stringify(logs,null,2)}</pre><h4>Latest publish response</h4><pre>${r.last_publish_response||''}</pre><h4>Latest sync response</h4><pre>${r.shopify_sync_status||''} @ ${r.last_sync_check_at||''}</pre><h4>Preview artifacts</h4><pre>${JSON.stringify(previews,null,2)}</pre><h4>Manual setup packet</h4><pre>${r.manual_setup_packet_path||''}\n${r.manual_setup_packet_json||''}</pre>`}
 async function load(){rows=await fetch('/api/queue').then(r=>r.json());const q=rows.filter(rf);const t=document.getElementById('t'); if(!q.length){t.innerHTML='<tr><td>No rows.</td></tr>';return;} t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+q.map(r=>'<tr>'+cols.map(k=>`<td>${c(r,k)}</td>`).join('')+'</tr>').join('')}
-['collection','family','statusf','ptype','manualf'].forEach(id=>document.getElementById(id).addEventListener('change',load)); load();
+['collection','family','statusf','statef'].forEach(id=>document.getElementById(id).addEventListener('change',load)); load();
 </script>
 </body></html>

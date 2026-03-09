@@ -12,8 +12,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from catalog_config import load_catalog
-from catalog_queue import dump_launch_report, dump_ops_review_csv, load_rows
-from run_queue import build_assets_for_rows, export_row_json, mark_review, publish_approved, recheck_sync, seed_listings
+from catalog_queue import dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, load_rows
+from run_queue import build_assets_for_rows, export_row_json, generate_setup_packets, mark_review, publish_approved, recheck_sync, seed_listings
 
 app = FastAPI(title="Crafted Occasion Catalog Dashboard")
 app.mount("/out", StaticFiles(directory=ROOT / "out"), name="out")
@@ -66,6 +66,18 @@ def action_recheck_sync(ids: str = Form("")) -> JSONResponse:
     id_list = [i.strip() for i in ids.split(",") if i.strip()]
     return JSONResponse({"sync_checked": recheck_sync(id_list or None)})
 
+
+
+
+@app.post("/actions/setup-packets")
+def action_setup_packets(ids: str = Form("")) -> JSONResponse:
+    id_list = [i.strip() for i in ids.split(",") if i.strip()]
+    return JSONResponse({"setup_packets": generate_setup_packets(id_list or None)})
+
+
+@app.post("/actions/export-manual-setup")
+def action_export_manual_setup() -> JSONResponse:
+    return JSONResponse({"manual_setup_csv": dump_manual_setup_only_csv("manual_setup_required.csv")})
 
 @app.post("/actions/export")
 def action_export() -> JSONResponse:

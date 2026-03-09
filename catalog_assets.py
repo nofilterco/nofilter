@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,17 @@ STYLE_PRESETS: dict[str, dict[str, Any]] = {
     "family-milestones": {
         "classic": {"bg": (245, 241, 247, 255), "ink": (51, 45, 76, 255), "accent": (142, 97, 166, 255)},
         "modern": {"bg": (242, 246, 252, 255), "ink": (38, 50, 69, 255), "accent": (84, 122, 180, 255)},
+    },
+}
+
+PREVIEW_STYLE_PRESETS: dict[str, dict[str, dict[str, Any]]] = {
+    "bridal-party": {
+        "text_plus_logo": {"primary": "script_nameplate", "alternate": "minimal_block", "preferred_mode": "light"},
+        "text_only": {"primary": "script_nameplate", "alternate": "monogram_frame", "preferred_mode": "light"},
+    },
+    "family-reunion": {
+        "wrap_mug": {"primary": "wrap_mug", "alternate": "stacked_text", "preferred_mode": "dark"},
+        "text_plus_photo": {"primary": "arch_badge", "alternate": "script_nameplate", "preferred_mode": "dark"},
     },
 }
 
@@ -204,3 +216,42 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
     path = OUT_DIR / f"placeholder_{slug}.png"
     img.save(path)
     return str(path)
+
+
+def _preview_preset(collection_slug: str, template_family: str, fallback_strategy: str) -> dict[str, Any]:
+    coll = PREVIEW_STYLE_PRESETS.get(collection_slug, {})
+    return coll.get(template_family, {"primary": fallback_strategy, "alternate": "", "preferred_mode": "light"})
+
+
+def build_storefront_preview_set(row: dict[str, Any]) -> dict[str, Any]:
+    slug = row.get("listing_slug", "listing")
+    product_family = row.get("product_family", "tee")
+    template_family = row.get("template_family", "text_only")
+    collection_slug = row.get("collection_slug", "family-reunion")
+    text = row.get("placeholder_art_text") or default_placeholder_text(slug, template_family)
+    fallback_strategy = row.get("placeholder_art_mode") or resolve_art_strategy(template_family, slug, product_family)
+    preset = _preview_preset(collection_slug, template_family, fallback_strategy)
+    colors = json.loads(row.get("enabled_colors_json") or "[]")
+    light_blank = colors[0] if colors else "White"
+    dark_blank = next((c for c in colors if c.lower() in {"black", "navy", "maroon"}), "Black")
+
+    primary = build_placeholder_asset(text, f"{slug}_primary", product_family=product_family, art_strategy=preset["primary"], collection_slug=collection_slug, style_pack=row.get("collection_slug", ""), blank_color=light_blank)
+    alternate = ""
+    if preset.get("alternate"):
+        alternate = build_placeholder_asset(text, f"{slug}_alternate", product_family=product_family, art_strategy=preset["alternate"], collection_slug=collection_slug, style_pack=row.get("collection_slug", ""), blank_color=dark_blank)
+    dark = build_placeholder_asset(text, f"{slug}_dark", product_family=product_family, art_strategy=preset["primary"], collection_slug=collection_slug, style_pack=row.get("collection_slug", ""), contrast_mode="light_on_dark", blank_color=dark_blank)
+    light = build_placeholder_asset(text, f"{slug}_light", product_family=product_family, art_strategy=preset["primary"], collection_slug=collection_slug, style_pack=row.get("collection_slug", ""), contrast_mode="dark_on_light", blank_color=light_blank)
+    mug_wrap = ""
+    if product_family == "mug" or template_family == "wrap_mug":
+        mug_wrap = build_placeholder_asset(text, f"{slug}_wrap", product_family="mug", art_strategy="wrap_mug", collection_slug=collection_slug, style_pack=row.get("collection_slug", ""), blank_color=light_blank)
+
+    return {
+        "preview_style": preset["primary"],
+        "primary_preview": primary,
+        "alternate_preview": alternate,
+        "garment_preview_dark": dark,
+        "garment_preview_light": light,
+        "mug_wrap_preview": mug_wrap,
+        "preferred_mode": preset.get("preferred_mode", "light"),
+        "listing_specific": True,
+    }
