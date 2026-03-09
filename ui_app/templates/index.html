@@ -1,5 +1,14 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Crafted Occasion Dashboard</title>
-<style>body{font-family:Arial;max-width:1200px;margin:20px auto}button{margin:4px;padding:8px}table{width:100%;font-size:12px}td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left}.wrap{max-height:420px;overflow:auto}</style></head>
+<style>
+body{font-family:Arial;max-width:1350px;margin:20px auto}
+button{margin:4px;padding:8px 10px}
+table{width:100%;font-size:12px;border-collapse:collapse}td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
+.wrap{max-height:520px;overflow:auto}
+.badge{padding:2px 8px;border-radius:10px;font-weight:bold;font-size:11px;color:#fff}
+.READY_FOR_REVIEW{background:#f0a202}.APPROVED{background:#2f7d32}.PUBLISHED{background:#1967d2}.PUBLISH_FAILED{background:#c62828}.MANUAL_PERSONALIZATION{background:#6a1b9a}
+.spinner{display:none;margin-left:10px}.spinner.active{display:inline-block}
+.muted{color:#666;font-size:11px}
+</style></head>
 <body>
 <h1>Crafted Occasion Catalog Operations Dashboard</h1>
 <p>Seed launch listings, build placeholders, review, publish, and export report.</p>
@@ -12,14 +21,36 @@
 <button onclick="post('/actions/reject',{})">Reject Ready/Approved Rows</button>
 <button onclick="post('/actions/publish',{})">Publish Approved</button>
 <button onclick="post('/actions/export',{})">Export Launch Report</button>
+<span id="spinner" class="spinner">⏳ Running...</span>
 </div>
+<h4>Latest action result</h4>
 <pre id="result"></pre>
 <div class="wrap"><table id="t"></table></div>
 <script>
-const cols=['id','status','collection_slug','product_family','listing_title','publish_mode','personalization_mode','enabled_sizes_json','enabled_colors_json','printify_product_id','asset_local_path'];
+const cols=['id','status','pipeline_stage','collection_slug','product_family','listing_title','publish_mode','in_stock_only','show_all_variants','printify_product_id','shopify_product_id','error_stage','error_message','asset_local_path'];
 function val(id){return document.getElementById(id).value}
-async function post(url,data){const body=new URLSearchParams(data);const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);load();}
-async function load(){const q=await fetch('/api/queue').then(r=>r.json());const t=document.getElementById('t');if(!q.length){t.innerHTML='<tr><td>No rows yet.</td></tr>';return;}t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+q.map(r=>'<tr>'+cols.map(c=>`<td>${(r[c]||'').toString().slice(0,100)}</td>`).join('')+'</tr>').join('')}
+function badge(status){if(!status)return ''; return `<span class="badge ${status}">${status}</span>`}
+function link(v,base){if(!v)return ''; return `<a href="${base}${v}" target="_blank">${v}</a>`}
+async function post(url,data){
+  const body=new URLSearchParams(data); const sp=document.getElementById('spinner'); sp.classList.add('active');
+  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);}catch(e){document.getElementById('result').textContent=`{"error":"${e}"}`}
+  finally{sp.classList.remove('active');load();}
+}
+function c(r,k){
+  if(k==='status'){
+    let b=badge(r.status||'');
+    if((r.needs_manual_personalization_setup||'')==='YES') b += ' '+badge('MANUAL_PERSONALIZATION');
+    return b;
+  }
+  if(k==='printify_product_id') return link(r[k],'https://printify.com/app/products/');
+  if(k==='shopify_product_id') return (r.shopify_handle?`<a href="/admin/products/${r.shopify_product_id}" target="_blank">${r.shopify_product_id}</a>`:r[k]||'');
+  return (r[k]||'').toString().slice(0,180)
+}
+async function load(){
+  const q=await fetch('/api/queue').then(r=>r.json());const t=document.getElementById('t');
+  if(!q.length){t.innerHTML='<tr><td>No rows yet.</td></tr>';return;}
+  t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+q.map(r=>'<tr>'+cols.map(k=>`<td>${c(r,k)}</td>`).join('')+'</tr>').join('')
+}
 load();
 </script>
 </body></html>

@@ -55,19 +55,24 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "listing_template_id": item.get("listing_template_id", slug),
             "product_profile_id": item.get("product_profile_id", ""),
             "publish_mode": item.get("publish_mode", "personalized"),
-            "personalization_fields_json": json.dumps(item.get("personalization_fields", [])),
+            "personalization_fields_json": json.dumps(item.get("personalization_fields", tpl.get("personalization_fields", []))),
+            "image_upload_fields_json": json.dumps(item.get("image_upload_fields", tpl.get("image_upload_fields", []))),
+            "logo_upload_fields_json": json.dumps(item.get("logo_upload_fields", tpl.get("logo_upload_fields", []))),
+            "text_fields_json": json.dumps(item.get("text_fields", tpl.get("text_fields", []))),
             "personalization_instructions": tpl.get("personalization_instructions", "Manual personalization review may be required."),
             "title": build_title(item, tpl),
             "seo_title": build_seo_title(item, tpl),
             "description_html": build_description_html(item, tpl),
-            "tags_csv": build_tags_csv(item, coll),
+            "tags_csv": build_tags_csv(item, coll, tpl, profile),
             "shopify_tags_csv": coll["shopify_tag"],
-            "placeholder_art_mode": tpl.get("art_strategy", "text-only"),
+            "placeholder_art_mode": tpl.get("art_strategy", "stacked_text"),
             "placeholder_art_text": tpl.get("default_art_placeholder_text", "Custom Text"),
             "enabled_sizes_json": json.dumps(item.get("launch_visible_sizes", profile.get("launch_visible_sizes", []))),
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", []))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
             "variant_strategy": "curated_launch",
+            "show_all_variants": "YES" if item.get("show_all_variants", False) else "",
+            "in_stock_only": "YES" if item.get("in_stock_only", False) else "",
             "debug_trace": f"{now_iso()}:seeded",
         })
         resolve_profile(row, profile)
@@ -78,11 +83,24 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
 
 def build_assets_for_rows(limit: int = 0) -> int:
     rows = load_rows()
+    idx = catalog_indexes(load_catalog())
     done = 0
     for row in rows:
         if row["status"] not in ("DRAFT", "READY_FOR_REVIEW"):
             continue
-        row["asset_local_path"] = build_placeholder_asset(row.get("placeholder_art_text") or row["listing_title"], row["listing_slug"])
+        tpl = idx["templates"].get(row.get("listing_template_id", ""), {})
+        safe_areas = tpl.get("product_safe_area", {}) if isinstance(tpl.get("product_safe_area", {}), dict) else {}
+        row["asset_local_path"] = build_placeholder_asset(
+            row.get("placeholder_art_text") or row["listing_title"],
+            row["listing_slug"],
+            product_family=row.get("product_family", "tee"),
+            art_strategy=row.get("placeholder_art_mode", "stacked_text"),
+            collection_slug=row.get("collection_slug", "family-reunion"),
+            style_pack=tpl.get("style_pack", row.get("collection_slug", "")),
+            contrast_mode=tpl.get("contrast_mode", "auto"),
+            blank_color=(json.loads(row.get("enabled_colors_json") or "[]") or ["White"])[0],
+            product_safe_area=safe_areas.get(row.get("product_family", "tee"), {}),
+        )
         row["pipeline_stage"] = "ASSET_BUILT"
         row["status"] = "READY_FOR_REVIEW"
         row["debug_trace"] = f"{row.get('debug_trace','')} | {now_iso()}:asset_built"
@@ -128,17 +146,18 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
                 print(f"DEBUG_PAYLOAD[{debug_title}]={row.get('_last_printify_payload', '{}')}")
             if dry_run:
                 row["pipeline_stage"] = "PUBLISH_DRY_RUN"
-            elif row.get("printify_product_id"):
-                row["status"] = "PUBLISHED"
+            elif row.get("status") == "PUBLISHED" and row.get("printify_product_id"):
                 row["published_at"] = now_iso()
                 row["pipeline_stage"] = "PUBLISHED"
-                row["error_stage"] = ""
-                row["error_message"] = ""
             else:
-                raise RuntimeError(row.get("error_message") or "Create product succeeded without printify_product_id")
+                row["pipeline_stage"] = "PUBLISH_FAILED"
+                row["status"] = "PUBLISH_FAILED"
+                row["error_stage"] = row.get("error_stage") or "PUBLISH"
+                row["error_message"] = row.get("error_message") or "Create product succeeded without printify_product_id"
         except Exception as exc:
             row["pipeline_stage"] = "PUBLISH_FAILED"
-            row["error_stage"] = "PUBLISH"
+            row["status"] = "PUBLISH_FAILED"
+            row["error_stage"] = row.get("error_stage") or "PUBLISH"
             row["error_message"] = str(exc)
         count += 1
         if limit and count >= limit:
