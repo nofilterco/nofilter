@@ -1,0 +1,29 @@
+{
+  "listing_id": "12",
+  "listing_slug": "bridal-party-canvas-tote-bag",
+  "listing_title": "Bridal Party Canvas Tote Bag",
+  "manual_setup_required": true,
+  "text_fields": [
+    {
+      "type": "text",
+      "key": "role",
+      "label": "Role",
+      "required": true,
+      "max_length": "",
+      "helper_text": "Bridesmaid"
+    },
+    {
+      "type": "text",
+      "key": "person_name",
+      "label": "Name",
+      "required": true,
+      "max_length": 18,
+      "helper_text": "Mia"
+    }
+  ],
+  "logo_fields": [],
+  "image_fields": [],
+  "recommended_preview_placeholder": "Mia\nBridal Party Tote",
+  "recommended_preview_artifact": "",
+  "helper_text": "Manual Personalization Hub setup required after publishing."
+}

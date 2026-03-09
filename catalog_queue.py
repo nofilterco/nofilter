@@ -9,7 +9,8 @@ from typing import Any
 QUEUE_PATH = Path("queue.csv")
 
 NEW_SCHEMA = [
-    "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","template_family","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","buyer_personalization_schema_json","internal_workflow_metadata_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup","printify_publish_status","shopify_sync_status","launch_status","last_publish_response","last_sync_check_at","publish_log_history_json"
+    "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","template_family","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","buyer_personalization_schema_json","internal_workflow_metadata_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup","printify_publish_status","shopify_sync_status","launch_status","last_publish_response","last_sync_check_at","publish_log_history_json",
+    "preview_style","preview_artifacts_json","manual_setup_packet_path","manual_setup_packet_json","manual_setup_status","featured_flag","merchandising_priority"
 ]
 
 
@@ -44,9 +45,11 @@ def migrate_if_needed() -> None:
         n["show_all_variants"] = row.get("show_all_variants") or "NO"
         n["in_stock_only"] = row.get("in_stock_only") or "YES"
         n["printify_publish_status"] = row.get("printify_publish_status") or "not_attempted"
-        n["shopify_sync_status"] = row.get("shopify_sync_status") or "not_checked"
+        n["shopify_sync_status"] = row.get("shopify_sync_status") or "SYNC_PENDING"
         n["launch_status"] = row.get("launch_status") or "MANUAL_PERSONALIZATION_REQUIRED"
         n["publish_log_history_json"] = row.get("publish_log_history_json") or "[]"
+        n["preview_artifacts_json"] = row.get("preview_artifacts_json") or "{}"
+        n["manual_setup_status"] = row.get("manual_setup_status") or "pending"
         migrated.append(n)
     _write(migrated)
 
@@ -94,6 +97,13 @@ def dump_launch_report(path: str = "launch_report.json") -> str:
         "template_family": r.get("template_family", ""),
         "placeholder_art_mode": r.get("placeholder_art_mode", ""),
         "launch_status": r.get("launch_status", ""),
+        "preview_style": r.get("preview_style", ""),
+        "preview_artifact_paths": json.loads(r.get("preview_artifacts_json") or "{}"),
+        "manual_setup_packet_status": r.get("manual_setup_status", ""),
+        "manual_setup_packet_path": r.get("manual_setup_packet_path", ""),
+        "sync_closure_status": r.get("shopify_sync_status", ""),
+        "featured_flag": r.get("featured_flag", "NO"),
+        "merchandising_priority": r.get("merchandising_priority", ""),
         "personalization_capability_summary": {
             "template_family": r.get("template_family", ""),
             "text": bool(json.loads(r.get("text_fields_json") or "[]")),
@@ -111,7 +121,18 @@ def dump_launch_report(path: str = "launch_report.json") -> str:
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv") -> str:
     rows = load_rows()
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "placeholder_art_mode", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "in_stock_only", "show_all_variants"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "placeholder_art_mode", "preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants"]
+    with Path(path).open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in fieldnames})
+    return path
+
+
+def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
+    rows = [r for r in load_rows() if r.get("needs_manual_personalization_setup") == "YES"]
+    fieldnames = ["id", "listing_slug", "title", "product_family", "status", "launch_status", "manual_setup_status", "manual_setup_packet_path"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

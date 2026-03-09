@@ -1,29 +1,81 @@
 collections:
-  - slug: family-milestones
-    title: Family Milestones
-    shopify_tag: collection-family-milestones
-    shopify_collection_name: Family Milestones
-    default_audience: family-gift-buyers
-    default_keywords: [family, milestone, gift, personalized]
-    seasonal_notes: "Year-round gifting, Mother/Father's Day peaks"
-  - slug: family-reunion
-    title: Family Reunion
-    shopify_tag: collection-family-reunion
-    shopify_collection_name: Family Reunion
-    default_audience: reunion-planners
-    default_keywords: [reunion, cousins, family, matching]
-    seasonal_notes: "Spring and summer reunion season"
-  - slug: wedding-bridal
-    title: Wedding & Bridal
-    shopify_tag: collection-wedding-bridal
-    shopify_collection_name: Wedding & Bridal
-    default_audience: brides-and-couples
-    default_keywords: [wedding, bride, engagement, keepsake]
-    seasonal_notes: "Peak wedding season Q2-Q3"
-  - slug: bridal-party
-    title: Bridal Party
-    shopify_tag: collection-bridal-party
-    shopify_collection_name: Bridal Party
-    default_audience: bridal-party-gifters
-    default_keywords: [bridesmaid, maid of honor, bach, crew]
-    seasonal_notes: "Strong around bach weekends and wedding events"
+- slug: family-milestones
+  title: Family Milestones
+  shopify_tag: collection-family-milestones
+  shopify_collection_name: Family Milestones
+  default_audience: family-gift-buyers
+  default_keywords:
+  - family
+  - milestone
+  - gift
+  - personalized
+  seasonal_notes: Year-round gifting, Mother/Father's Day peaks
+  collection_hero_title: Family Milestones
+  hero_subtitle: Personalized keepsakes and matching gifts.
+  featured_listing_slugs: []
+  preferred_preview_style: minimal_block
+  default_visible_colors:
+  - White
+  - Black
+  sort_priority: 50
+- slug: family-reunion
+  title: Family Reunion
+  shopify_tag: collection-family-reunion
+  shopify_collection_name: Family Reunion
+  default_audience: reunion-planners
+  default_keywords:
+  - reunion
+  - cousins
+  - family
+  - matching
+  seasonal_notes: Spring and summer reunion season
+  collection_hero_title: Family Reunion
+  hero_subtitle: Personalized keepsakes and matching gifts.
+  featured_listing_slugs:
+  - family-reunion-photo-mug
+  preferred_preview_style: arch_badge
+  default_visible_colors:
+  - White
+  - Sport Grey
+  - Navy
+  sort_priority: 20
+- slug: wedding-bridal
+  title: Wedding & Bridal
+  shopify_tag: collection-wedding-bridal
+  shopify_collection_name: Wedding & Bridal
+  default_audience: brides-and-couples
+  default_keywords:
+  - wedding
+  - bride
+  - engagement
+  - keepsake
+  seasonal_notes: Peak wedding season Q2-Q3
+  collection_hero_title: Wedding & Bridal
+  hero_subtitle: Personalized keepsakes and matching gifts.
+  featured_listing_slugs: []
+  preferred_preview_style: minimal_block
+  default_visible_colors:
+  - White
+  - Black
+  sort_priority: 52
+- slug: bridal-party
+  title: Bridal Party
+  shopify_tag: collection-bridal-party
+  shopify_collection_name: Bridal Party
+  default_audience: bridal-party-gifters
+  default_keywords:
+  - bridesmaid
+  - maid of honor
+  - bach
+  - crew
+  seasonal_notes: Strong around bach weekends and wedding events
+  collection_hero_title: Bridal Party
+  hero_subtitle: Personalized keepsakes and matching gifts.
+  featured_listing_slugs:
+  - bridesmaid-bow-personalized-tee
+  preferred_preview_style: script_nameplate
+  default_visible_colors:
+  - White
+  - Black
+  - Light Pink
+  sort_priority: 10

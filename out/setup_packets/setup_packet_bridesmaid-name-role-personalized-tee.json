@@ -1,0 +1,29 @@
+{
+  "listing_id": "7",
+  "listing_slug": "bridesmaid-name-role-personalized-tee",
+  "listing_title": "Bridesmaid Name & Role Personalized T-Shirt",
+  "manual_setup_required": true,
+  "text_fields": [
+    {
+      "type": "text",
+      "key": "person_name",
+      "label": "Name",
+      "required": true,
+      "max_length": 18,
+      "helper_text": "Ava"
+    },
+    {
+      "type": "text",
+      "key": "role",
+      "label": "Role",
+      "required": true,
+      "max_length": "",
+      "helper_text": "Bridesmaid"
+    }
+  ],
+  "logo_fields": [],
+  "image_fields": [],
+  "recommended_preview_placeholder": "Ava\nBridesmaid",
+  "recommended_preview_artifact": "out/placeholder_bridesmaid-name-role-personalized-tee_primary.png",
+  "helper_text": "Manual Personalization Hub setup required after publishing."
+}

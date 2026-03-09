@@ -1,0 +1,39 @@
+{
+  "listing_id": "15",
+  "listing_slug": "family-name-reunion-color-mug",
+  "listing_title": "Family Name Reunion Color Mug",
+  "manual_setup_required": true,
+  "text_fields": [
+    {
+      "type": "text",
+      "key": "family_name",
+      "label": "Family Name",
+      "required": true,
+      "max_length": 24,
+      "helper_text": "Harris"
+    }
+  ],
+  "logo_fields": [
+    {
+      "type": "logo",
+      "key": "reunion_logo",
+      "label": "Reunion Logo",
+      "required": false,
+      "max_length": "",
+      "helper_text": ""
+    }
+  ],
+  "image_fields": [
+    {
+      "type": "image",
+      "key": "family_photo",
+      "label": "Family Photo",
+      "required": false,
+      "max_length": "",
+      "helper_text": ""
+    }
+  ],
+  "recommended_preview_placeholder": "Custom Name\nEst. 2026",
+  "recommended_preview_artifact": "out/placeholder_family-name-reunion-color-mug_primary.png",
+  "helper_text": "Confirm family name/year and optional upload assets before approving order."
+}
