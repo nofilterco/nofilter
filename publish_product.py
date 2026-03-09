@@ -134,6 +134,18 @@ def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
         row["shopify_sync_status"] = "shopify_product_resolved"
 
 
+
+def recheck_sync_for_row(row: dict[str, str]) -> dict[str, str]:
+    shop_id = os.getenv("PRINTIFY_SHOP_ID", "")
+    row["last_sync_check_at"] = now_iso()
+    if not shop_id:
+        row["shopify_sync_status"] = "sync_check_failed"
+        row["error_stage"] = row.get("error_stage") or "CONFIG"
+        row["error_message"] = row.get("error_message") or "PRINTIFY_SHOP_ID missing for sync check"
+        return row
+    _sync_status_check(row, shop_id)
+    return row
+
 def publish_listing(row: dict[str, str], *, dry_run: bool = False) -> dict[str, str]:
     if row.get("product_family") == "tote":
         row["error_stage"] = "PUBLISH"
