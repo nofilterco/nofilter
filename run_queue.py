@@ -1,1073 +1,157 @@
+from __future__ import annotations
+
 import argparse
-import csv
-import os
-import random
-import hashlib
 import json
-import sys
 from datetime import datetime, timezone
-from typing import List, Dict, Tuple, Optional
+from typing import Any
 
-from dotenv import load_dotenv
+from catalog_assets import build_placeholder_asset
+from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
+from catalog_config import catalog_indexes, load_catalog
+from catalog_queue import append_rows, dump_launch_report, load_rows, next_id, save_rows
+from publish_product import publish_listing, resolve_profile, resolve_variants
 
-from phrase_engine import pick_phrase
-from title_builder import build_title
-from description_builder import build_description
-from design_factory import build_design
-from mockup_factory import make_simple_hat_mockup
-from quality_gate import pass_fail
-from r2_upload import upload_file
-from nostalgia_blueprint import (
-    pick_brief,
-    detect_risk,
-    STYLE_CHOICES,
-    brief_from_row,
-    evaluate_embroidery_concept,
-)
-from drops import get_drop_names, get_drop_limited, build_drop_tags, get_drop_title
-from drop_limits import can_publish, increment
-
-from publish_hat import (
-    upload_image_by_url,
-    create_hat_product,
-    publish_product,
-    get_shop_id,
-    find_hat_blueprint,
-    pick_print_provider,
-    get_variants,
-    choose_hat_variant_ids,
-)
-
-QUEUE_PATH = "queue.csv"
-AUTO_SEED_IF_EMPTY = 5  # auto-add N NEW rows if nothing is publishable
-RUN_CONTROL_PATH = os.getenv("NOFILTER_RUN_CONTROL_PATH", "ui_app/state.json")
-TRACE_SEPARATOR = " | "
+REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "PUBLISHED"]
 
 
-# ----------------------------
-# Helpers
-# ----------------------------
-def slugify(s: str) -> str:
-    return "".join(c.lower() if c.isalnum() else "-" for c in (s or ""))[:80].strip("-")
-
-
-def _sha1(s: str) -> str:
-    return hashlib.sha1((s or "").encode("utf-8")).hexdigest()
-
-
-def _env_true(name: str, default: str = "0") -> bool:
-    v = (os.getenv(name, default) or "").strip().lower()
-    return v in ("1", "true", "yes", "y", "on")
-
-
-def _windows_safe_text(msg: str) -> str:
-    """Avoid UnicodeEncodeError on legacy Windows consoles."""
-    if os.name != "nt":
-        return msg
-    return msg.encode("ascii", errors="replace").decode("ascii")
-
-
-def log(msg: str) -> None:
-    try:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(errors="replace")
-    except Exception:
-        pass
-    print(_windows_safe_text(msg))
-
-
-def load_queue() -> List[Dict[str, str]]:
-    if not os.path.exists(QUEUE_PATH):
-        raise FileNotFoundError(f"Missing {QUEUE_PATH}. Create it in the project folder.")
-    with open(QUEUE_PATH, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-def _now_iso() -> str:
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _read_control_state() -> dict:
-    try:
-        if not RUN_CONTROL_PATH or not os.path.exists(RUN_CONTROL_PATH):
-            return {}
-        with open(RUN_CONTROL_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
+def seed_listings(from_launch_plan: bool = True, collection: str = "", family: str = "") -> int:
+    catalog = load_catalog()
+    idx = catalog_indexes(catalog)
+    source = catalog["launch_plan"] if from_launch_plan else catalog["listing_templates"]
+    rows = load_rows()
+    existing = {r.get("listing_slug") for r in rows}
+    start = next_id(rows)
+    out: list[dict[str, Any]] = []
+    for item in source:
+        profile = idx["profiles"].get(item.get("product_profile_id"), {})
+        coll_slug = item.get("collection_slug", "")
+        if collection and coll_slug != collection:
+            continue
+        if family and profile.get("product_family") != family:
+            continue
+        slug = item.get("listing_slug") or item.get("slug")
+        if slug in existing:
+            continue
+        coll = idx["collections"][coll_slug]
+        tpl = idx["templates"].get(item.get("listing_template_id", ""), {})
+        row = {k: "" for k in load_rows()[0].keys()} if rows else {}
+        row.update({
+            "id": str(start + len(out)),
+            "status": "DRAFT",
+            "pipeline_stage": "SEEDED",
+            "store_brand": "Crafted Occasion",
+            "collection_slug": coll_slug,
+            "collection_title": coll["title"],
+            "shopify_collection_tag": coll["shopify_tag"],
+            "listing_slug": slug,
+            "listing_title": item.get("exact_title") or item.get("title_template", ""),
+            "listing_template_id": item.get("listing_template_id", slug),
+            "product_profile_id": item.get("product_profile_id", ""),
+            "publish_mode": item.get("publish_mode", "personalized"),
+            "personalization_fields_json": json.dumps(item.get("personalization_fields", [])),
+            "personalization_instructions": tpl.get("personalization_instructions", "Manual personalization review may be required."),
+            "title": build_title(item, tpl),
+            "seo_title": build_seo_title(item, tpl),
+            "description_html": build_description_html(item, tpl),
+            "tags_csv": build_tags_csv(item, coll),
+            "shopify_tags_csv": coll["shopify_tag"],
+            "placeholder_art_mode": tpl.get("art_strategy", "text-only"),
+            "placeholder_art_text": tpl.get("default_art_placeholder_text", "Custom Text"),
+            "enabled_sizes_json": json.dumps(item.get("launch_visible_sizes", profile.get("launch_visible_sizes", []))),
+            "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", []))),
+            "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
+            "variant_strategy": "curated_launch",
+            "debug_trace": f"{now_iso()}:seeded",
+        })
+        resolve_profile(row, profile)
+        out.append(row)
+    append_rows(out)
+    return len(out)
 
 
-def stop_requested() -> bool:
-    return bool(_read_control_state().get("stop_requested"))
-
-
-def cancel_pending_requested() -> bool:
-    return bool(_read_control_state().get("cancel_pending"))
-
-
-def _append_trace(r: Dict[str, str], message: str) -> None:
-    stamp = _now_iso()
-    existing = (r.get("debug_trace") or "").strip()
-    items = [i for i in existing.split(TRACE_SEPARATOR) if i] if existing else []
-    items.append(f"{stamp}:{message}")
-    r["debug_trace"] = TRACE_SEPARATOR.join(items[-25:])
-
-
-def _set_stage(r: Dict[str, str], stage: str, message: str = "") -> None:
-    r["pipeline_stage"] = stage
-    if message:
-        _append_trace(r, f"{stage}:{message}")
-    else:
-        _append_trace(r, stage)
-
-
-def _set_error(r: Dict[str, str], stage: str, err: Exception | str) -> None:
-    msg = err if isinstance(err, str) else f"{type(err).__name__}: {err}"
-    r["status"] = "ERROR"
-    r["pipeline_stage"] = "ERROR"
-    r["error_stage"] = stage
-    r["error_message"] = str(msg)
-    _append_trace(r, f"ERROR@{stage}:{msg}")
-
-
-def save_queue(rows: List[Dict[str, str]]) -> None:
-    if not rows:
-        return
-
-    fieldnames = list(rows[0].keys())
-
-    # Ensure these columns exist even if older queue.csv is missing them
-    for extra in (
-        "local_path",
-        "generated_at",
-        "prompt_debug",
-        "prompt_hash",
-        "resolved_style",
-        "quality_status",
-        "concept_risk",
-        "quality_reason",
-        "quality_json",
-        "detected_color_count",
-        "raw_color_count",
-        "final_color_count",
-        "palette_used",
-        "composition_mode",
-        "background_mode",
-        "frame_mode",
-        "safe_area_fill_pct",
-        "motif_bbox",
-        "vector_mode_used",
-        "pipeline_stage",
-        "concept_reasons",
-        "error_stage",
-        "error_message",
-        "debug_trace",
-        "started_at",
-        "finished_at",
-        "drop_seq",
-        "approved_at",
-        "printify_product_id",
-        "published_at",
-        "r2_url",
-        "mockup_r2_url",
-        "printify_image_id",
-        "placement",
-        "product_type",
-        "drop",
-        "motif",
-        "risk_flag",
-        "policy_status",
-        "risk_reason",
-        "drop_title",
-        "vibe",
-        "tone",
-        "embroidery_focus",
-        "embroidery_style",
-        "palette_hint",
-        "micro_niche",
-        "object_state",
-        "era_situation",
-        "texture_cue",
-        "variation_modifier",
-        "motif_family",
-        "motif_frame",
-        "motif_keywords",
-        "center_weight",
-        "silhouette_strength",
-        "design_mode",
-        "text_mode",
-        "slogan_type",
-        "humor_mode",
-        "nostalgia_axis",
-        "wearable_score",
-        "novelty_score",
-        "nostalgia_score",
-        "clarity_score",
-        "embroidery_score",
-        "commercial_interest_reason",
-        "art_direction",
-        "layout_archetype",
-        "type_treatment",
-        "icon_treatment",
-        "frame_treatment",
-        "visual_energy",
-        "hierarchy_score",
-        "visual_balance_score",
-        "typography_quality_score",
-        "icon_quality_score",
-        "plate_dependency",
-        "commercial_style_reason",
-        "product_rules",
-        "design_family",
-        "slogan_family",
-        "font_pairing",
-        "palette_family",
-        "composition_template",
-        "accent_icon_family",
-        "merch_style",
-        "phrase_category",
-        "merch_taste_score",
-        "reroll_reason",
-    ):
-        if extra not in fieldnames:
-            fieldnames.append(extra)
-
-    with open(QUEUE_PATH, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        for row in rows:
-            w.writerow(row)
-
-
-def pick_next_row_index(rows: List[Dict[str, str]]) -> Optional[int]:
-    """
-    Policy gate:
-      - status must be APPROVED or NEW
-      - NEVER publish GENERATED (awaiting human review)
-      - if risk_flag == REVIEW, policy_status must be APPROVED
-      - skip HOLD_QUALITY / HOLD_ERROR / SOLD_OUT
-    """
-    for desired_status in ("APPROVED", "NEW"):
-        for i, r in enumerate(rows):
-            status = (r.get("status", "") or "").strip().upper()
-            if status != desired_status:
-                continue
-
-            if status == "GENERATED":
-                continue
-
-            risk = (r.get("risk_flag", "SAFE") or "SAFE").strip().upper()
-            policy = (r.get("policy_status", "") or "").strip().upper()
-            if risk == "REVIEW" and policy != "APPROVED":
-                continue
-
-            return i
-    return None
-
-
-def _analytics_tags(r: dict) -> list[str]:
-    """Extra tags for Shopify filtering + later reporting."""
-    out: list[str] = []
-    for key in ("drop", "style", "tone", "vibe"):
-        val = (r.get(key) or "").strip()
-        if val:
-            out.append(f"{key}:{slugify(val)}")
-    mn = (r.get("micro_niche") or "").strip()
-    if mn:
-        out.append(f"micro:{slugify(mn)}")
-    return out
-
-
-def _risk_check_row(r: dict) -> tuple[str, str]:
-    combined = " | ".join(
-        [
-            r.get("phrase", "") or "",
-            r.get("niche", "") or "",
-            r.get("tags", "") or "",
-            r.get("motif", "") or "",
-            r.get("drop", "") or "",
-        ]
-    )
-    reason = detect_risk(combined)
-    if reason:
-        return "REVIEW", reason
-    return "SAFE", ""
-
-
-def _brief_context_from_row(r: dict) -> dict:
-    """
-    Deterministic Option B context: forces prompt builder to use the row fields.
-    """
-    return {
-        "motif": r.get("motif", "") or "",
-        "phrase": r.get("phrase", "") or "",
-        "drop_title": r.get("drop_title", "") or "",
-        "vibe": r.get("vibe", "") or "",
-        "tone": r.get("tone", "") or "",
-        "palette_hint": r.get("palette_hint", "") or "",
-        "embroidery_style": r.get("embroidery_style", "") or "",
-        "embroidery_focus": r.get("embroidery_focus", "") or "",
-        "micro_niche": r.get("micro_niche", "") or "",
-        "object_state": r.get("object_state", "") or "",
-        "era_situation": r.get("era_situation", "") or "",
-        "texture_cue": r.get("texture_cue", "") or "",
-        "variation_modifier": r.get("variation_modifier", "") or "",
-        "motif_family": r.get("motif_family", "") or "",
-        "motif_frame": r.get("motif_frame", "") or "",
-        "motif_keywords": r.get("motif_keywords", "") or "",
-        "center_weight": r.get("center_weight", "") or "",
-        "silhouette_strength": r.get("silhouette_strength", "") or "",
-        "design_mode": r.get("design_mode", "") or "",
-        "text_mode": r.get("text_mode", "") or "",
-        "slogan_type": r.get("slogan_type", "") or "",
-        "humor_mode": r.get("humor_mode", "") or "",
-        "nostalgia_axis": r.get("nostalgia_axis", "") or "",
-        "wearable_score": r.get("wearable_score", "") or "",
-        "novelty_score": r.get("novelty_score", "") or "",
-        "nostalgia_score": r.get("nostalgia_score", "") or "",
-        "clarity_score": r.get("clarity_score", "") or "",
-        "embroidery_score": r.get("embroidery_score", "") or "",
-        "commercial_interest_reason": r.get("commercial_interest_reason", "") or "",
-        "art_direction": r.get("art_direction", "") or "",
-        "layout_archetype": r.get("layout_archetype", "") or "",
-        "type_treatment": r.get("type_treatment", "") or "",
-        "icon_treatment": r.get("icon_treatment", "") or "",
-        "frame_treatment": r.get("frame_treatment", "") or "",
-        "visual_energy": r.get("visual_energy", "") or "",
-        "hierarchy_score": r.get("hierarchy_score", "") or "",
-        "visual_balance_score": r.get("visual_balance_score", "") or "",
-        "typography_quality_score": r.get("typography_quality_score", "") or "",
-        "icon_quality_score": r.get("icon_quality_score", "") or "",
-        "plate_dependency": r.get("plate_dependency", "") or "",
-        "commercial_style_reason": r.get("commercial_style_reason", "") or "",
-        "design_family": r.get("design_family", "") or "",
-        "slogan_family": r.get("slogan_family", "") or "",
-        "font_pairing": r.get("font_pairing", "") or "",
-        "palette_family": r.get("palette_family", "") or "",
-        "composition_template": r.get("composition_template", "") or "",
-        "accent_icon_family": r.get("accent_icon_family", "") or "",
-        "merch_style": r.get("merch_style", "") or "",
-        "phrase_category": r.get("phrase_category", "") or "",
-        "merch_taste_score": r.get("merch_taste_score", "") or "",
-        "reroll_reason": r.get("reroll_reason", "") or "",
-        # style is handled separately by design_factory via `style=` arg and/or brief.style
-    }
-
-
-# ----------------------------
-# Seeding
-# ----------------------------
-def seed_queue(rows, count: int, *, drop: str = "", include_text: bool = False):
-    """
-    Appends NEW rows to the queue for hats (Option B).
-    Seeds stable V4 fields into queue.csv so human review is consistent.
-    """
-    if count <= 0:
-        return rows
-
-    max_id = 0
-    for r in rows:
-        try:
-            max_id = max(max_id, int((r.get("id") or "0").strip()))
-        except Exception:
-            pass
-
-    balanced_modes = ["phrase_hat", "phrase_hat", "phrase_hat", "phrase_hat", "word_hat", "icon_phrase_hat", "icon_only"]
-    for i in range(1, count + 1):
-        new_id = str(max_id + i)
-
-        # balanced default mix for commercial hat types
-        brief = pick_brief(drop=drop or None, include_text=include_text)
-        forced_mode = balanced_modes[(i - 1) % len(balanced_modes)]
-        if count >= 4:
-            brief.design_mode = forced_mode
-            brief.include_text = forced_mode != "icon_only"
-            if brief.include_text and not getattr(brief, "phrase", ""):
-                brief.phrase = pick_phrase("nostalgia", category_override=getattr(brief, "phrase_category", "") or None)
-
-        # Use V4’s weighted style (do NOT randomize here) – but keep fallback
-        style = getattr(brief, "style", "") or random.choice(STYLE_CHOICES)
-
-        drop_slug = getattr(brief, "drop", "") or ""
-        base_tags = [
-            "90s nostalgia",
-            "retro hat",
-            "embroidered cap",
-            "millennial gift",
-            "minimalist retro",
-            f"drop:{drop_slug}" if drop_slug else "",
-        ]
-        tags_str = ",".join([t for t in base_tags if t])
-
-        rows.append(
-            {
-                "id": new_id,
-                "status": "NEW",
-                "product_type": "hat",
-                "drop": getattr(brief, "drop", ""),
-                "drop_title": getattr(brief, "drop_title", ""),
-                "motif": getattr(brief, "motif", ""),
-                "vibe": getattr(brief, "vibe", ""),
-                "tone": getattr(brief, "tone", ""),
-                "palette_hint": getattr(brief, "palette_hint", ""),
-                "embroidery_style": getattr(brief, "embroidery_style", ""),
-                "embroidery_focus": getattr(brief, "embroidery_focus", ""),
-                "micro_niche": getattr(brief, "micro_niche", ""),
-                "object_state": getattr(brief, "object_state", ""),
-                "era_situation": getattr(brief, "era_situation", ""),
-                "texture_cue": getattr(brief, "texture_cue", ""),
-                "variation_modifier": getattr(brief, "variation_modifier", ""),
-                "motif_family": getattr(brief, "motif_family", ""),
-                "motif_frame": getattr(brief, "motif_frame", ""),
-                "motif_keywords": getattr(brief, "motif_keywords", ""),
-                "center_weight": getattr(brief, "center_weight", ""),
-                "silhouette_strength": getattr(brief, "silhouette_strength", ""),
-                "design_mode": getattr(brief, "design_mode", "icon_only"),
-                "text_mode": getattr(brief, "text_mode", ""),
-                "slogan_type": getattr(brief, "slogan_type", ""),
-                "humor_mode": getattr(brief, "humor_mode", ""),
-                "nostalgia_axis": getattr(brief, "nostalgia_axis", ""),
-                "wearable_score": getattr(brief, "wearable_score", ""),
-                "novelty_score": getattr(brief, "novelty_score", ""),
-                "nostalgia_score": getattr(brief, "nostalgia_score", ""),
-                "clarity_score": getattr(brief, "clarity_score", ""),
-                "embroidery_score": getattr(brief, "embroidery_score", ""),
-                "commercial_interest_reason": getattr(brief, "commercial_interest_reason", ""),
-                "art_direction": getattr(brief, "art_direction", ""),
-                "layout_archetype": getattr(brief, "layout_archetype", ""),
-                "type_treatment": getattr(brief, "type_treatment", ""),
-                "icon_treatment": getattr(brief, "icon_treatment", ""),
-                "frame_treatment": getattr(brief, "frame_treatment", "none"),
-                "visual_energy": getattr(brief, "visual_energy", "balanced"),
-                "hierarchy_score": getattr(brief, "hierarchy_score", ""),
-                "visual_balance_score": getattr(brief, "visual_balance_score", ""),
-                "typography_quality_score": getattr(brief, "typography_quality_score", ""),
-                "icon_quality_score": getattr(brief, "icon_quality_score", ""),
-                "plate_dependency": getattr(brief, "plate_dependency", "low"),
-                "commercial_style_reason": getattr(brief, "commercial_style_reason", ""),
-                "design_family": getattr(brief, "design_family", "text_first"),
-                "slogan_family": getattr(brief, "slogan_family", ""),
-                "font_pairing": getattr(brief, "font_pairing", ""),
-                "palette_family": getattr(brief, "palette_family", ""),
-                "composition_template": getattr(brief, "composition_template", ""),
-                "accent_icon_family": getattr(brief, "accent_icon_family", "none"),
-                "merch_style": getattr(brief, "merch_style", ""),
-                "phrase_category": getattr(brief, "phrase_category", ""),
-                "merch_taste_score": getattr(brief, "merch_taste_score", ""),
-                "reroll_reason": getattr(brief, "reroll_reason", ""),
-                "product_rules": "hat_front:1200x675@300dpi|safe:3.5x2.0in|max_colors:6",
-                "style": style,
-                "include_text": "YES" if getattr(brief, "include_text", include_text) else "NO",
-                "phrase": getattr(brief, "phrase", "") if getattr(brief, "include_text", include_text) else "",
-                "niche": "90s nostalgia",
-                "tags": tags_str,
-                "placement": "front",
-                "risk_flag": "SAFE",
-                "policy_status": "",
-                "risk_reason": "",
-                "prompt_debug": "",
-                "prompt_hash": "",
-                "resolved_style": "",
-                "quality_status": "",
-                "concept_risk": "",
-                "quality_reason": "",
-                "quality_json": "",
-                "raw_color_count": "",
-                "final_color_count": "",
-                "palette_used": "",
-                "composition_mode": "",
-                "background_mode": "",
-                "frame_mode": "",
-                "safe_area_fill_pct": "",
-                "motif_bbox": "",
-                "vector_mode_used": "",
-                "pipeline_stage": "SEEDED",
-                "concept_reasons": "",
-                "error_stage": "",
-                "error_message": "",
-                "debug_trace": "",
-                "started_at": "",
-                "finished_at": "",
-                "drop_seq": "",
-                "local_path": "",
-                "generated_at": "",
-                "approved_at": "",
-                "printify_product_id": "",
-                "published_at": "",
-                "r2_url": "",
-                "mockup_r2_url": "",
-                "printify_image_id": "",
-            }
-        )
-
-    return rows
-
-
-# ----------------------------
-# Generate-only mode (human review)
-# ----------------------------
-def generate_batch(n: int, *, drop_filter: str = "") -> tuple[int, int]:
-    """Generate images for the next N NEW rows and stop (no upload/publish)."""
-    load_dotenv()
-    rows = load_queue()
-    out_dir = os.getenv("OUT_DIR", "out")
-    os.makedirs(out_dir, exist_ok=True)
-    want_prompt = _env_true("PROMPT_DEBUG", "0")
-
-    generated = 0
-    failed = 0
-    for idx, r in enumerate(rows):
-        if generated >= n:
+def build_assets_for_rows(limit: int = 0) -> int:
+    rows = load_rows()
+    done = 0
+    for row in rows:
+        if row["status"] not in ("DRAFT", "READY_FOR_REVIEW"):
+            continue
+        row["asset_local_path"] = build_placeholder_asset(row.get("placeholder_art_text") or row["listing_title"], row["listing_slug"])
+        row["pipeline_stage"] = "ASSET_BUILT"
+        row["status"] = "READY_FOR_REVIEW"
+        row["debug_trace"] = f"{row.get('debug_trace','')} | {now_iso()}:asset_built"
+        done += 1
+        if limit and done >= limit:
             break
-        if stop_requested():
-            log("🛑 Stop requested; halting before next queued item.")
+    save_rows(rows)
+    return done
+
+
+def mark_review(status: str, ids: list[str] | None = None) -> int:
+    rows = load_rows()
+    updated = 0
+    for row in rows:
+        if ids and row["id"] not in ids:
+            continue
+        if status == "APPROVED" and row["status"] == "READY_FOR_REVIEW":
+            row["status"] = "APPROVED"
+            row["approved_at"] = now_iso()
+            updated += 1
+        elif status == "REJECTED" and row["status"] in ("READY_FOR_REVIEW", "APPROVED"):
+            row["status"] = "REJECTED"
+            updated += 1
+    save_rows(rows)
+    return updated
+
+
+def publish_approved(limit: int = 0) -> int:
+    rows = load_rows()
+    count = 0
+    for row in rows:
+        if row["status"] != "APPROVED":
+            continue
+        resolve_variants(row)
+        try:
+            publish_listing(row)
+            row["published_at"] = now_iso()
+            row["pipeline_stage"] = "PUBLISHED"
+        except Exception as exc:
+            row["error_stage"] = "PUBLISH"
+            row["error_message"] = str(exc)
+        count += 1
+        if limit and count >= limit:
             break
-
-        status = (r.get("status", "") or "").strip().upper()
-        if status != "NEW":
-            continue
-        if drop_filter and (r.get("drop") or "").strip() != drop_filter:
-            continue
-
-        rid = (r.get("id") or "").strip() or str(idx + 1)
-        product_type = (r.get("product_type") or "hat").strip().lower()
-        style = (r.get("style") or "ai_art").strip().lower()
-        placement = (r.get("placement") or "front").strip().lower()
-        drop = (r.get("drop") or "").strip()
-        motif = (r.get("motif") or "").strip()
-        include_text = (r.get("include_text") or "NO").strip().upper() in ("YES", "TRUE", "1")
-
-        r["started_at"] = r.get("started_at") or _now_iso()
-        r["finished_at"] = ""
-        r["error_stage"] = ""
-        r["error_message"] = ""
-        _set_stage(r, "CONCEPT_CHECK", f"row={rid} drop={drop} motif={motif}")
-        log(f"ℹ️ [row={rid}] stage=CONCEPT_CHECK drop={drop} motif={motif}")
-
-        phrase = (r.get("phrase") or "").strip()
-        if include_text and not phrase:
-            try:
-                phrase = pick_phrase("90s nostalgia")
-                r["phrase"] = phrase
-            except Exception as e:
-                _set_error(r, "PHRASE_PICK", e)
-                rows[idx] = r
-                failed += 1
-                log(f"🟥 [row={rid}] phrase selection failed: {e}")
-                continue
-
-        try:
-            brief_gate = brief_from_row(r, include_text=include_text)
-            _, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
-            r["concept_reasons"] = ",".join(concept_reasons)
-            block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
-            risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
-
-            if block_reasons:
-                r["concept_risk"] = "HIGH"
-                r["quality_status"] = "FAIL"
-                r["quality_reason"] = "concept:" + ",".join(block_reasons)
-                r["status"] = "HOLD_QUALITY"
-                _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
-                r["finished_at"] = _now_iso()
-                rows[idx] = r
-                failed += 1
-                log(f"🟨 [row={rid}] concept gate blocked: {r['quality_reason']}")
-                continue
-
-            if risk_reasons:
-                r["concept_risk"] = "MEDIUM"
-                r["quality_status"] = "REVIEW"
-                r["quality_reason"] = "concept_review:" + ",".join(risk_reasons)
-            else:
-                r["concept_risk"] = "LOW"
-                if (r.get("quality_status") or "").strip().upper() == "REVIEW" and (r.get("quality_reason") or "").startswith("concept_review:"):
-                    r["quality_status"] = ""
-                    r["quality_reason"] = ""
-        except Exception as e:
-            r["concept_risk"] = "MEDIUM"
-            r["quality_status"] = "REVIEW"
-            r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
-            r["concept_reasons"] = f"concept_error:{type(e).__name__}:{e}"
-            _append_trace(r, f"CONCEPT_CHECK_ERROR:{e}")
-
-        risk_flag, risk_reason = _risk_check_row(r)
-        r["risk_flag"] = risk_flag
-        r["risk_reason"] = risk_reason
-        if risk_flag == "REVIEW" and (r.get("policy_status", "") or "").strip().upper() != "APPROVED":
-            r["status"] = "HOLD"
-            _set_stage(r, "HOLD", f"risk:{risk_reason}")
-            r["finished_at"] = _now_iso()
-            rows[idx] = r
-            failed += 1
-            log(f"🟨 [row={rid}] risk hold: {risk_reason}")
-            continue
-
-        drop_display = get_drop_title(drop) if drop else ""
-        title = build_title("", product_type=product_type, drop=drop_display, motif_hint=("Loading" if "loading" in motif.lower() else None))
-
-        try:
-            _set_stage(r, "GENERATING", f"style={style}")
-            log(f"ℹ️ [row={rid}] stage=GENERATING style={style}")
-            img, prompt_debug = build_design(
-                style=style,
-                title=title,
-                phrase=phrase,
-                niche="90s nostalgia",
-                placement=placement,
-                product_type=product_type,
-                drop=drop or None,
-                include_text=include_text,
-                brief_context=_brief_context_from_row(r),
-                validate_concept=False,
-                return_prompt=True,
-            )
-        except Exception as e:
-            _set_error(r, "DESIGN_GENERATION", e)
-            r["finished_at"] = _now_iso()
-            rows[idx] = r
-            failed += 1
-            log(f"🟥 [row={rid}] design generation failed: {e}")
-            continue
-
-        if want_prompt:
-            try:
-                r["prompt_debug"] = json.dumps({"prompt": prompt_debug, "product_type": product_type, "drop": drop, "motif": motif, "style": style}, ensure_ascii=False)
-            except Exception:
-                r["prompt_debug"] = str(prompt_debug)
-        r["prompt_hash"] = _sha1(prompt_debug)
-        r["resolved_style"] = (r.get("style") or "").strip().lower()
-
-        try:
-            filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
-            local_path = os.path.join(out_dir, filename)
-            img.save(local_path, "PNG")
-            if not os.path.exists(local_path):
-                raise RuntimeError(f"image_save_missing:{local_path}")
-            r["local_path"] = local_path
-            _set_stage(r, "IMAGE_SAVED", local_path)
-        except Exception as e:
-            _set_error(r, "IMAGE_SAVE", e)
-            r["finished_at"] = _now_iso()
-            rows[idx] = r
-            failed += 1
-            log(f"🟥 [row={rid}] image save failed: {e}")
-            continue
-
-        _set_stage(r, "QUALITY_CHECK")
-        ok, q_reason, q_json = pass_fail(local_path)
-        prior_review = (r.get("quality_status") or "").strip().upper() == "REVIEW"
-        prior_reason = (r.get("quality_reason") or "").strip()
-        if ok:
-            r["quality_status"] = "REVIEW" if prior_review else "PASS"
-            r["quality_reason"] = prior_reason if prior_review else ""
-        else:
-            r["quality_status"] = "FAIL"
-            r["quality_reason"] = q_reason or "pass_fail returned false"
-        try:
-            r["quality_json"] = json.dumps(q_json)
-        except Exception:
-            r["quality_json"] = str(q_json)
-        r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
-        r["raw_color_count"] = str((q_json or {}).get("raw_color_count", img.info.get("raw_color_count", "")))
-        r["final_color_count"] = str((q_json or {}).get("final_color_count", img.info.get("final_color_count", "")))
-        r["palette_used"] = ",".join((q_json or {}).get("palette_used", [])) if isinstance((q_json or {}).get("palette_used"), list) else str((q_json or {}).get("palette_used", img.info.get("palette_used", "")))
-        r["composition_mode"] = str(img.info.get("composition_mode", ""))
-        r["background_mode"] = str(img.info.get("background_mode", ""))
-        r["frame_mode"] = str(img.info.get("frame_mode", ""))
-        r["safe_area_fill_pct"] = str(img.info.get("safe_area_fill_pct", ""))
-        r["motif_bbox"] = str((q_json or {}).get("motif_bbox", img.info.get("motif_bbox", "")))
-        r["vector_mode_used"] = str(img.info.get("vector_mode_used", ""))
-        r["design_family"] = str(img.info.get("design_family", r.get("design_family", "")))
-        r["slogan_family"] = str(img.info.get("slogan_family", r.get("slogan_family", "")))
-        r["font_pairing"] = str(img.info.get("font_pairing", r.get("font_pairing", "")))
-        r["palette_family"] = str(img.info.get("palette_family", r.get("palette_family", "")))
-        r["composition_template"] = str(img.info.get("composition_template", r.get("composition_template", "")))
-        r["accent_icon_family"] = str(img.info.get("accent_icon_family", r.get("accent_icon_family", "")))
-        r["merch_style"] = str(img.info.get("merch_style", r.get("merch_style", "")))
-        r["phrase_category"] = str(img.info.get("phrase_category", r.get("phrase_category", "")))
-        r["merch_taste_score"] = str(img.info.get("merch_taste_score", r.get("merch_taste_score", "")))
-        r["reroll_reason"] = str(img.info.get("reroll_reason", r.get("reroll_reason", "")))
-
-        if not ok:
-            r["status"] = "HOLD_QUALITY"
-            _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
-            r["finished_at"] = _now_iso()
-            rows[idx] = r
-            failed += 1
-            log(f"🟨 [row={rid}] quality fail: {r['quality_reason']}")
-            continue
-
-        r["status"] = "GENERATED"
-        r["generated_at"] = _now_iso()
-        r["finished_at"] = _now_iso()
-        _set_stage(r, "GENERATED", "generation complete")
-        rows[idx] = r
-        generated += 1
-        log(f"✅ [row={rid}] generated successfully")
-
-    save_queue(rows)
-    return generated, failed
+    save_rows(rows)
+    return count
 
 
-def verify_generated(*, prune_missing: bool = True) -> tuple[int, int, int]:
-    """Verify GENERATED rows by checking whether local_path still exists."""
-    load_dotenv()
-    rows = load_queue()
+def main() -> None:
+    p = argparse.ArgumentParser(description="Crafted Occasion catalog queue runner")
+    p.add_argument("--seed-launch", action="store_true")
+    p.add_argument("--collection", default="")
+    p.add_argument("--family", default="")
+    p.add_argument("--build-assets", action="store_true")
+    p.add_argument("--approve-all", action="store_true")
+    p.add_argument("--reject-all", action="store_true")
+    p.add_argument("--publish-approved", action="store_true")
+    p.add_argument("--export-report", action="store_true")
+    args = p.parse_args()
 
-    approved = 0
-    rejected = 0
-    checked = 0
-
-    new_rows = []
-    for r in rows:
-        status = (r.get("status", "") or "").strip().upper()
-        if status != "GENERATED":
-            new_rows.append(r)
-            continue
-
-        checked += 1
-        path = (r.get("local_path") or "").strip()
-        if path and os.path.exists(path):
-            r["status"] = "APPROVED"
-            r["approved_at"] = datetime.now(timezone.utc).isoformat()
-            r["finished_at"] = _now_iso()
-            _set_stage(r, "APPROVED", "verify_generated_exists")
-            new_rows.append(r)
-            approved += 1
-        else:
-            rejected += 1
-            if prune_missing:
-                continue
-            r["status"] = "REJECTED"
-            r["finished_at"] = _now_iso()
-            _set_stage(r, "REJECTED", "verify_generated_missing_local_path")
-            new_rows.append(r)
-
-    save_queue(new_rows)
-    return checked, approved, rejected
-
-
-# ----------------------------
-# Publish one
-# ----------------------------
-def process_one(*, auto_seed: bool = True) -> bool:
-    load_dotenv()
-    rows = load_queue()
-
-    if stop_requested():
-        log("🛑 Stop requested; skipping new publish item.")
-        return False
-
-    if cancel_pending_requested():
-        cancelled = 0
-        for row in rows:
-            if (row.get("status", "") or "").strip().upper() == "NEW":
-                row["status"] = "CANCELLED"
-                row["finished_at"] = _now_iso()
-                _set_stage(row, "CANCELLED", "cancel_all_pending")
-                cancelled += 1
-        if cancelled:
-            save_queue(rows)
-            log(f"🛑 Cancelled pending NEW rows: {cancelled}")
-        return False
-
-    target_idx = pick_next_row_index(rows)
-    if target_idx is None and auto_seed:
-        names = get_drop_names()
-        per = max(1, int(AUTO_SEED_IF_EMPTY / max(1, len(names))))
-        remaining = AUTO_SEED_IF_EMPTY
-        for dn in names:
-            n = min(per, remaining)
-            rows = seed_queue(rows, n, drop=dn)
-            remaining -= n
-        while remaining > 0:
-            rows = seed_queue(rows, 1, drop=random.choice(names))
-            remaining -= 1
-        save_queue(rows)
-        target_idx = pick_next_row_index(rows)
-
-    if target_idx is None:
-        log("✅ No publishable NEW/APPROVED rows.")
-        return False
-
-    r = rows[target_idx]
-    rid = (r.get("id") or "").strip() or str(target_idx + 1)
-    product_type = (r.get("product_type") or "hat").strip().lower()
-    style = (r.get("style") or "ai_art").strip().lower()
-    placement = (r.get("placement") or "front").strip().lower()
-    drop = (r.get("drop") or "").strip()
-    motif = (r.get("motif") or "").strip()
-    include_text = (r.get("include_text") or "NO").strip().upper() in ("YES", "TRUE", "1")
-
-    r["started_at"] = r.get("started_at") or _now_iso()
-    r["finished_at"] = ""
-    r["error_stage"] = ""
-    r["error_message"] = ""
-    _set_stage(r, "CONCEPT_CHECK", f"row={rid} drop={drop} motif={motif}")
-    log(f"ℹ️ [row={rid}] publish stage=CONCEPT_CHECK")
-
-    phrase = (r.get("phrase") or "").strip()
-    if include_text and not phrase:
-        try:
-            phrase = pick_phrase("90s nostalgia")
-            r["phrase"] = phrase
-        except Exception as e:
-            _set_error(r, "PHRASE_PICK", e)
-            r["finished_at"] = _now_iso()
-            rows[target_idx] = r
-            save_queue(rows)
-            return False
-
-    try:
-        brief_gate = brief_from_row(r, include_text=include_text)
-        _, concept_reasons = evaluate_embroidery_concept(brief_gate, product_type=product_type)
-        r["concept_reasons"] = ",".join(concept_reasons)
-        block_reasons = [reason for reason in concept_reasons if reason.startswith("concept_blocked_")]
-        risk_reasons = [reason for reason in concept_reasons if reason.startswith("risk_")]
-        if block_reasons:
-            r["concept_risk"] = "HIGH"
-            r["quality_status"] = "FAIL"
-            r["quality_reason"] = "concept:" + ",".join(block_reasons)
-            r["status"] = "HOLD_QUALITY"
-            _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
-            r["finished_at"] = _now_iso()
-            rows[target_idx] = r
-            save_queue(rows)
-            return False
-        if risk_reasons:
-            r["concept_risk"] = "MEDIUM"
-            r["quality_status"] = "REVIEW"
-            r["quality_reason"] = "concept_review:" + ",".join(risk_reasons)
-        else:
-            r["concept_risk"] = "LOW"
-    except Exception as e:
-        r["concept_risk"] = "MEDIUM"
-        r["quality_status"] = "REVIEW"
-        r["quality_reason"] = f"concept_review:concept_error:{type(e).__name__}"
-        r["concept_reasons"] = f"concept_error:{type(e).__name__}:{e}"
-
-    risk_flag, risk_reason = _risk_check_row(r)
-    r["risk_flag"] = risk_flag
-    r["risk_reason"] = risk_reason
-    if risk_flag == "REVIEW" and (r.get("policy_status", "") or "").strip().upper() != "APPROVED":
-        r["status"] = "HOLD"
-        _set_stage(r, "HOLD", f"risk:{risk_reason}")
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    limit = get_drop_limited(drop) if drop else 0
-    if drop and limit and not can_publish(drop, limit):
-        r["status"] = "SOLD_OUT"
-        _set_stage(r, "SOLD_OUT", "drop_limit_reached")
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    drop_display = get_drop_title(drop) if drop else ""
-    title = build_title("", product_type=product_type, drop=drop_display, motif_hint=("Loading" if "loading" in motif.lower() else None))
-    description = build_description(title, "90s nostalgia", product_type=product_type, drop=drop_display, motif=motif, limited_count=get_drop_limited(drop) if drop else 0)
-    tags = [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()] + ["no filter", "nofilter", "90s"] + build_drop_tags(drop) + _analytics_tags(r)
-
-    try:
-        _set_stage(r, "GENERATING", f"style={style}")
-        img, prompt_debug = build_design(style=style, title=title, phrase=phrase, niche="90s nostalgia", placement=placement, product_type=product_type, drop=drop or None, include_text=include_text, brief_context=_brief_context_from_row(r), validate_concept=False, return_prompt=True)
-    except Exception as e:
-        _set_error(r, "DESIGN_GENERATION", e)
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    if _env_true("PROMPT_DEBUG", "0"):
-        r["prompt_debug"] = prompt_debug
-    r["prompt_hash"] = _sha1(prompt_debug)
-    r["resolved_style"] = (r.get("style") or "").strip().lower()
-
-    out_dir = os.getenv("OUT_DIR", "out")
-    os.makedirs(out_dir, exist_ok=True)
-    filename = f"{rid}_{slugify(drop)}_{slugify(motif) or 'design'}.png"
-    local_path = os.path.join(out_dir, filename)
-    try:
-        img.save(local_path, "PNG")
-        if not os.path.exists(local_path):
-            raise RuntimeError(f"image_save_missing:{local_path}")
-        r["local_path"] = local_path
-        _set_stage(r, "IMAGE_SAVED", local_path)
-    except Exception as e:
-        _set_error(r, "IMAGE_SAVE", e)
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    _set_stage(r, "QUALITY_CHECK")
-    ok, q_reason, q_json = pass_fail(local_path)
-    if ok:
-        r["quality_status"] = "PASS"
-        r["quality_reason"] = ""
-    else:
-        r["quality_status"] = "FAIL"
-        r["quality_reason"] = q_reason or "pass_fail returned false"
-    try:
-        r["quality_json"] = json.dumps(q_json)
-    except Exception:
-        r["quality_json"] = str(q_json)
-    r["detected_color_count"] = str((q_json or {}).get("color_count", ""))
-    r["raw_color_count"] = str((q_json or {}).get("raw_color_count", img.info.get("raw_color_count", "")))
-    r["final_color_count"] = str((q_json or {}).get("final_color_count", img.info.get("final_color_count", "")))
-    r["palette_used"] = ",".join((q_json or {}).get("palette_used", [])) if isinstance((q_json or {}).get("palette_used"), list) else str((q_json or {}).get("palette_used", img.info.get("palette_used", "")))
-    r["composition_mode"] = str(img.info.get("composition_mode", ""))
-    r["background_mode"] = str(img.info.get("background_mode", ""))
-    r["frame_mode"] = str(img.info.get("frame_mode", ""))
-    r["safe_area_fill_pct"] = str(img.info.get("safe_area_fill_pct", ""))
-    r["motif_bbox"] = str((q_json or {}).get("motif_bbox", img.info.get("motif_bbox", "")))
-    r["vector_mode_used"] = str(img.info.get("vector_mode_used", ""))
-    if not ok:
-        r["status"] = "HOLD_QUALITY"
-        _set_stage(r, "HOLD_QUALITY", r["quality_reason"])
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    try:
-        r2_url = upload_file(local_path, key=f"nofilter/hats/{filename}")
-        r["r2_url"] = r2_url
-    except Exception as e:
-        _set_error(r, "R2_UPLOAD", e)
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    try:
-        if _env_true("MAKE_MOCKUPS", "0"):
-            mock = make_simple_hat_mockup(img)
-            mock_name = filename.replace(".png", "_mockup.png")
-            mock_path = os.path.join(out_dir, mock_name)
-            mock.save(mock_path, "PNG")
-            r["mockup_r2_url"] = upload_file(mock_path, key=f"nofilter/mockups/{mock_name}")
-    except Exception as e:
-        _append_trace(r, f"MOCKUP_WARNING:{e}")
-
-    try:
-        blueprint_id = find_hat_blueprint()
-        provider_id = pick_print_provider(blueprint_id)
-        variants = get_variants(blueprint_id, provider_id)
-        try:
-            variant_ids = choose_hat_variant_ids(variants, seed_key=f"{rid}|{title}")
-        except TypeError:
-            variant_ids = choose_hat_variant_ids(variants)
-        price_usd = float(os.getenv("HAT_PRICE_USD", "34.00"))
-        price_cents = int(round(price_usd * 100))
-        shop_id = get_shop_id()
-        printify_image_id = upload_image_by_url(filename, r2_url)
-        r["printify_image_id"] = printify_image_id
-        product_id = create_hat_product(shop_id=shop_id, title=title, description=description, tags=tags, blueprint_id=blueprint_id, provider_id=provider_id, variant_ids=variant_ids, image_id=printify_image_id, price_cents=price_cents)
-        publish_product(shop_id, product_id)
-        r["printify_product_id"] = str(product_id)
-    except Exception as e:
-        _set_error(r, "PUBLISH", e)
-        r["finished_at"] = _now_iso()
-        rows[target_idx] = r
-        save_queue(rows)
-        return False
-
-    if drop:
-        try:
-            r["drop_seq"] = str(increment(drop))
-        except Exception:
-            pass
-
-    r["published_at"] = _now_iso()
-    r["finished_at"] = _now_iso()
-    r["status"] = "PUBLISHED"
-    _set_stage(r, "PUBLISHED", "publish complete")
-    rows[target_idx] = r
-    save_queue(rows)
-
-    log(f"✅ Published hat: row={rid} product_id={r.get('printify_product_id','')}")
-    return True
-
-
-# ----------------------------
-# CLI
-# ----------------------------
-def main():
-    ap = argparse.ArgumentParser(description="NoFilterCo queue runner (hats / nostalgia)")
-    ap.add_argument("--seed", type=int, default=0, help="Add N NEW hat rows to queue.csv")
-    ap.add_argument("--drop", type=str, default="", help="Optional drop slug (see drops.yaml)")
-    ap.add_argument("--drop_mode", action="store_true", help="If seeding, rotate evenly across all drops instead of a single drop")
-    ap.add_argument("--include_text", action="store_true", help="If set, include short safe text on the hat design")
-    ap.add_argument("--generate_batch", type=int, default=0, help="Generate N images only (no upload/publish). Rows become status=GENERATED")
-    ap.add_argument("--verify_generated", action="store_true", help="Approve GENERATED rows if local_path exists; prune missing by default")
-    ap.add_argument("--keep_rejected", action="store_true", help="With --verify_generated: keep rejected rows (status=REJECTED) instead of removing")
-    ap.add_argument("--once", action="store_true", help="Process a single publishable row and exit")
-    ap.add_argument("--loop", action="store_true", help="Keep processing until no publishable rows remain")
-    ap.add_argument("--run_all", action="store_true", help="Alias for --loop")
-    args = ap.parse_args()
-
-    load_dotenv()
-    rows = load_queue()
-
-    # 1) Generate-only mode (human review workflow)
-    if args.generate_batch and args.generate_batch > 0:
-        generated, failed = generate_batch(args.generate_batch, drop_filter=args.drop)
-        log(f"✅ Generate pass complete: generated={generated} failed={failed}.")
-        log("\nNext:\n  - Manually delete any bad PNGs from your OUT_DIR folder (default: ./out)")
-        log("  - Then run: python run_queue.py --verify_generated")
-        return
-
-    # 2) Verification mode
-    if args.verify_generated:
-        checked, approved, rejected = verify_generated(prune_missing=not args.keep_rejected)
-        log(f"✅ Verify pass complete: checked={checked} approved={approved} rejected={rejected}.")
-        log("Now publish with: python run_queue.py --once   (or --run_all)")
-        return
-
-    # 3) Seeding
-    if args.seed > 0:
-        if args.drop_mode:
-            names = get_drop_names()
-            per = max(1, int(args.seed / max(1, len(names))))
-            remaining = args.seed
-            for dn in names:
-                n = min(per, remaining)
-                rows = seed_queue(rows, n, drop=dn, include_text=args.include_text)
-                remaining -= n
-            while remaining > 0:
-                rows = seed_queue(rows, 1, drop=random.choice(names), include_text=args.include_text)
-                remaining -= 1
-        else:
-            rows = seed_queue(rows, args.seed, drop=args.drop, include_text=args.include_text)
-
-        save_queue(rows)
-        log(f"✅ Seeded {args.seed} rows.")
-        if args.once or not args.loop:
-            return
-
-    if args.run_all:
-        args.loop = True
-
-    # 4) Loop publish mode
-    if args.loop:
-        published = 0
-        stopped = 0
-        while True:
-            did = process_one(auto_seed=False)
-            if not did:
-                stopped += 1
-                break
-            published += 1
-        log(f"✅ Publish pass complete: published={published} stop_events={stopped}.")
-        return
-
-    # default: publish once (auto seed if queue empty)
-    process_one(auto_seed=True)
+    if args.seed_launch:
+        print(f"seeded={seed_listings(True, args.collection, args.family)}")
+    if args.build_assets:
+        print(f"assets={build_assets_for_rows()}")
+    if args.approve_all:
+        print(f"approved={mark_review('APPROVED')}")
+    if args.reject_all:
+        print(f"rejected={mark_review('REJECTED')}")
+    if args.publish_approved:
+        print(f"published={publish_approved()}")
+    if args.export_report:
+        print(f"report={dump_launch_report()}")
 
 
 if __name__ == "__main__":

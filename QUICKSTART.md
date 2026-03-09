@@ -1,96 +1,50 @@
-# NoFilterCo – Queue-Driven Hat Pipeline (Windows Git Bash friendly)
+# Quickstart (Crafted Occasion)
 
-NoFilterCo generates embroidery-safe nostalgic hat art, verifies quality/safety, uploads to R2, then publishes products to Printify (which syncs to Shopify).
-
-## 1) Setup
-
+## 1) Install
 ```bash
 python -m venv .venv
-# Windows Git Bash:
-source .venv/Scripts/activate
-# Windows CMD:
-# .venv\Scripts\activate.bat
-# macOS/Linux:
-# source .venv/bin/activate
-
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create `.env` and set at minimum:
+## 2) Configure env
+Copy `.env.example` to `.env` and set Printify + optional R2 values.
 
-- `OPENAI_API_KEY` (required for **Generate**)
-- `PRINTIFY_TOKEN` (required for **Publish**)
-- `PRINTIFY_SHOP_ID` (required for **Publish**)
-- `R2_ACCOUNT_ID` (required for **Publish**)
-- `R2_ACCESS_KEY_ID` (required for **Publish**)
-- `R2_SECRET_ACCESS_KEY` (required for **Publish**)
-- `R2_BUCKET` (required for **Publish**)
-- `R2_PUBLIC_BASE_URL` (required for **Publish**)
-
-Use `.env.example` as the template.
-
-## 2) CLI first (recommended)
-
-### Seed
+## 3) Seed first 20 launch listings
 ```bash
-python run_queue.py --seed 6 --drop "Analog Era"
-python run_queue.py --seed 3 --drop "Early Internet" --include_text
+python run_queue.py --seed-launch
 ```
 
-### Generate
+Optional filters:
 ```bash
-python run_queue.py --generate_batch 6
+python run_queue.py --seed-launch --collection family-reunion
+python run_queue.py --seed-launch --family hoodie
 ```
 
-### Verify
+## 4) Build placeholder assets
 ```bash
-python run_queue.py --verify_generated
+python run_queue.py --build-assets
 ```
 
-### Publish
+## 5) Review and approve
 ```bash
-python run_queue.py --once
-# or
-python run_queue.py --run_all
+python run_queue.py --approve-all
+# or reject
+python run_queue.py --reject-all
 ```
 
-The CLI reports pass counts explicitly (`generated`, `failed`, `approved`, `rejected`, `published`).
+## 6) Publish approved listings
+```bash
+python run_queue.py --publish-approved
+```
 
-## 3) Local Control Panel (FastAPI)
+## 7) Export launch report
+```bash
+python run_queue.py --export-report
+```
 
-Start from the repo root:
-
+## UI dashboard
 ```bash
 python -m uvicorn ui_app.main:app --host 127.0.0.1 --port 8080 --reload
 ```
-
-Open <http://127.0.0.1:8080>.
-
-The local control panel includes:
-
-- Main actions: **Seed**, **Generate**, **Verify**, **Publish Once**, **Run All**
-- Queue utilities: **Clear Generated/Processed**, **Clear Queue** (with confirmation)
-- First-run readiness checks aligned to runtime env vars
-- Queue table viewer and gallery viewer (`out/`, `output/`)
-- Live status and last-action results
-- Drop picker with search + select all/clear all
-
-## 4) Embroidery safety config
-
-If `nofilter.yaml` has an `embroidery:` section, these keys are supported:
-
-- `embroidery_width_in`
-- `embroidery_height_in`
-- `safe_width_in`
-- `safe_height_in`
-- `max_colors`
-- `min_detail_in`
-- `min_text_in`
-- `allowed_thread_palette`
-
-If missing, safe defaults are used automatically.
-
-## 5) Notes
-
-- Runtime files are ignored: `ui_app/state.json`, `ui_app/logs/`, `ui_app/backups/`, `out/`, `output/`, `queue.csv.lock`.
-- Raster generation remains the default path. `GENERATE_MODE=svg` is intentionally gated and falls back to raster until fully wired.
+Open `http://127.0.0.1:8080`.

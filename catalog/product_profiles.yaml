@@ -1,0 +1,73 @@
+product_profiles:
+  - id: youth_tee_g5000b
+    product_family: tee
+    brand_model_label: Gildan 5000B Youth Tee
+    printify_blueprint_hints: {model: "G5000B", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer US provider with stable stock and 4+ rating"
+    launch_visible_sizes: [XS, S, M, L, XL]
+    launch_visible_colors: [White, Black, Sport Grey, Light Pink, Light Blue, Daisy, Navy, Red]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {default_cents: 2299}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: Youth T-Shirt
+  - id: adult_tee_g5000
+    product_family: tee
+    brand_model_label: Gildan 5000 Adult Tee
+    printify_blueprint_hints: {model: "G5000", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer US provider with broad color coverage"
+    launch_visible_sizes: [S, M, L, XL, 2XL, 3XL, 4XL, 5XL]
+    launch_visible_colors: [White, Black, Sport Grey, Ash, Sand, Natural, Navy, Light Blue, Light Pink, Military Green]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {default_cents: 2499}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: T-Shirt
+  - id: crewneck_g18000
+    product_family: crewneck
+    brand_model_label: Gildan 18000 Crewneck
+    printify_blueprint_hints: {model: "G18000", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer providers with 2XL-5XL availability"
+    launch_visible_sizes: [S, M, L, XL, 2XL, 3XL, 4XL, 5XL]
+    launch_visible_colors: [White, Black, Sport Grey, Ash, Sand, Navy, Maroon, Dark Heather]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {default_cents: 3499}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: Crewneck Sweatshirt
+  - id: hoodie_g18500
+    product_family: hoodie
+    brand_model_label: Gildan 18500 Hoodie
+    printify_blueprint_hints: {model: "G18500", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer providers with broad hoodie color matrix"
+    launch_visible_sizes: [S, M, L, XL, 2XL, 3XL, 4XL, 5XL]
+    launch_visible_colors: [White, Black, Sport Grey, Ash, Sand, Navy, Maroon, Military Green]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {default_cents: 4299}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: Hoodie
+  - id: mug_orca_color
+    product_family: mug
+    brand_model_label: ORCA Color Mug
+    printify_blueprint_hints: {model: "ORCA", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer providers supporting 11oz and 15oz"
+    launch_visible_sizes: [11oz, 15oz]
+    launch_visible_colors: [Black, Navy, Cambridge Blue, Light Blue, Green, Light Green, Yellow, Pink, Golden Yellow, Orange, Red, Maroon]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {size_11oz_cents: 1999, size_15oz_cents: 2299}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: Mug
+  - id: tote_liberty_canvas
+    product_family: tote
+    brand_model_label: Liberty Bags Canvas Tote
+    printify_blueprint_hints: {model: "liberty canvas tote", blueprint_id: 0, provider_id: 0}
+    provider_selection_rules: "Prefer providers with natural and black"
+    launch_visible_sizes: [15x16]
+    launch_visible_colors: [Natural, Black]
+    full_catalog_metadata: {}
+    retail_pricing_defaults: {default_cents: 2499}
+    personalization_capability: text
+    placeholder_print_position: front
+    default_shopify_product_type: Tote Bag

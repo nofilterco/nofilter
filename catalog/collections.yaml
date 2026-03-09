@@ -1,0 +1,29 @@
+collections:
+  - slug: family-milestones
+    title: Family Milestones
+    shopify_tag: collection-family-milestones
+    shopify_collection_name: Family Milestones
+    default_audience: family-gift-buyers
+    default_keywords: [family, milestone, gift, personalized]
+    seasonal_notes: "Year-round gifting, Mother/Father's Day peaks"
+  - slug: family-reunion
+    title: Family Reunion
+    shopify_tag: collection-family-reunion
+    shopify_collection_name: Family Reunion
+    default_audience: reunion-planners
+    default_keywords: [reunion, cousins, family, matching]
+    seasonal_notes: "Spring and summer reunion season"
+  - slug: wedding-bridal
+    title: Wedding & Bridal
+    shopify_tag: collection-wedding-bridal
+    shopify_collection_name: Wedding & Bridal
+    default_audience: brides-and-couples
+    default_keywords: [wedding, bride, engagement, keepsake]
+    seasonal_notes: "Peak wedding season Q2-Q3"
+  - slug: bridal-party
+    title: Bridal Party
+    shopify_tag: collection-bridal-party
+    shopify_collection_name: Bridal Party
+    default_audience: bridal-party-gifters
+    default_keywords: [bridesmaid, maid of honor, bach, crew]
+    seasonal_notes: "Strong around bach weekends and wedding events"
