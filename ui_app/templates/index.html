@@ -1,56 +1,34 @@
 <!doctype html><html><head><meta charset="utf-8"><title>Crafted Occasion Dashboard</title>
 <style>
-body{font-family:Arial;max-width:1350px;margin:20px auto}
-button{margin:4px;padding:8px 10px}
+body{font-family:Arial;max-width:1500px;margin:20px auto} button{margin:3px;padding:7px 10px}
+select,input{margin:3px;padding:6px}.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
 table{width:100%;font-size:12px;border-collapse:collapse}td,th{border-bottom:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}
-.wrap{max-height:520px;overflow:auto}
-.badge{padding:2px 8px;border-radius:10px;font-weight:bold;font-size:11px;color:#fff}
-.READY_FOR_REVIEW{background:#f0a202}.APPROVED{background:#2f7d32}.PUBLISHED{background:#1967d2}.PUBLISH_FAILED{background:#c62828}.MANUAL_PERSONALIZATION{background:#6a1b9a}
-.spinner{display:none;margin-left:10px}.spinner.active{display:inline-block}
-.muted{color:#666;font-size:11px}
-</style></head>
-<body>
+.wrap{max-height:560px;overflow:auto}.badge{padding:2px 8px;border-radius:10px;font-weight:bold;font-size:11px;color:#fff}
+.READY_FOR_REVIEW{background:#f0a202}.APPROVED{background:#2f7d32}.PUBLISHED_TO_PRINTIFY{background:#1967d2}.SYNCED_TO_SHOPIFY{background:#00796b}.PUBLISH_FAILED,.SYNC_FAILED{background:#c62828}.MANUAL_PERSONALIZATION_REQUIRED{background:#6a1b9a}
+.drawer{position:fixed;right:0;top:0;width:480px;height:100%;overflow:auto;background:#fff;border-left:1px solid #ddd;padding:12px;display:none}
+</style></head><body>
 <h1>Crafted Occasion Catalog Operations Dashboard</h1>
-<p>Seed launch listings, build placeholders, review, publish, and export report.</p>
-<div>
+<div class="toolbar">
 <select id="collection"><option value="">All collections</option><option>family-milestones</option><option>family-reunion</option><option>wedding-bridal</option><option>bridal-party</option></select>
 <select id="family"><option value="">All families</option><option>tee</option><option>crewneck</option><option>hoodie</option><option>mug</option><option>tote</option></select>
-<button onclick="post('/actions/seed',{collection:val('collection'),family:val('family')})">Seed Launch Plan</button>
-<button onclick="post('/actions/assets',{})">Generate Placeholder Assets</button>
-<button onclick="post('/actions/approve',{})">Bulk Approve Ready Rows</button>
-<button onclick="post('/actions/reject',{})">Reject Ready/Approved Rows</button>
-<button onclick="post('/actions/publish',{})">Publish Approved</button>
-<button onclick="post('/actions/export',{})">Export Launch Report</button>
-<span id="spinner" class="spinner">⏳ Running...</span>
+<select id="statusf"><option value="">All statuses</option><option>DRAFT</option><option>READY_FOR_REVIEW</option><option>APPROVED</option><option>PUBLISHED_TO_PRINTIFY</option><option>SYNCED_TO_SHOPIFY</option><option>MANUAL_PERSONALIZATION_REQUIRED</option><option>PUBLISH_FAILED</option><option>SYNC_FAILED</option></select>
+<select id="ptype"><option value="">All personalization</option><option>text_only</option><option>text_plus_logo</option><option>text_plus_photo</option><option>photo_keepsake</option><option>monogram_badge</option><option>wrap_mug</option></select>
+<select id="manualf"><option value="">Manual setup: all</option><option value="YES">YES</option><option value="NO">NO</option></select>
+<input id="selectedId" placeholder="Row id" style="width:85px"/>
+<button onclick="post('/actions/seed',{collection:val('collection'),family:val('family')})">Seed</button><button onclick="post('/actions/assets',{})">Build Assets</button><button onclick="post('/actions/publish',{})">Publish</button><button onclick="post('/actions/export',{})">Export</button>
 </div>
-<h4>Latest action result</h4>
-<pre id="result"></pre>
-<div class="wrap"><table id="t"></table></div>
+<pre id="result"></pre><div class="wrap"><table id="t"></table></div><div id="drawer" class="drawer"></div>
 <script>
-const cols=['id','status','pipeline_stage','collection_slug','product_family','listing_title','publish_mode','in_stock_only','show_all_variants','printify_product_id','shopify_product_id','error_stage','error_message','asset_local_path'];
-function val(id){return document.getElementById(id).value}
-function badge(status){if(!status)return ''; return `<span class="badge ${status}">${status}</span>`}
-function link(v,base){if(!v)return ''; return `<a href="${base}${v}" target="_blank">${v}</a>`}
-async function post(url,data){
-  const body=new URLSearchParams(data); const sp=document.getElementById('spinner'); sp.classList.add('active');
-  try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);}catch(e){document.getElementById('result').textContent=`{"error":"${e}"}`}
-  finally{sp.classList.remove('active');load();}
-}
-function c(r,k){
-  if(k==='status'){
-    let b=badge(r.status||'');
-    if((r.needs_manual_personalization_setup||'')==='YES') b += ' '+badge('MANUAL_PERSONALIZATION');
-    return b;
-  }
-  if(k==='printify_product_id') return link(r[k],'https://printify.com/app/products/');
-  if(k==='shopify_product_id') return (r.shopify_handle?`<a href="/admin/products/${r.shopify_product_id}" target="_blank">${r.shopify_product_id}</a>`:r[k]||'');
-  return (r[k]||'').toString().slice(0,180)
-}
-async function load(){
-  const q=await fetch('/api/queue').then(r=>r.json());const t=document.getElementById('t');
-  if(!q.length){t.innerHTML='<tr><td>No rows yet.</td></tr>';return;}
-  t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+q.map(r=>'<tr>'+cols.map(k=>`<td>${c(r,k)}</td>`).join('')+'</tr>').join('')
-}
-load();
+const cols=['id','status','collection_slug','product_family','template_family','listing_title','printify_publish_status','shopify_sync_status','needs_manual_personalization_setup','actions'];
+let rows=[]; function val(id){return document.getElementById(id).value}
+async function post(url,data){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)});document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);await load();}
+function badge(s){return s?`<span class="badge ${s}">${s}</span>`:''}
+function rf(r){return (!val('collection')||r.collection_slug===val('collection'))&&(!val('family')||r.product_family===val('family'))&&(!val('statusf')||r.status===val('statusf'))&&(!val('ptype')||r.template_family===val('ptype'))&&(!val('manualf')||r.needs_manual_personalization_setup===val('manualf'));}
+function actions(r){return `<button onclick="rowAct('approve','${r.id}')">approve</button><button onclick="rowAct('reject','${r.id}')">reject</button><button onclick="rowAct('publish','${r.id}')">publish</button><button onclick="rowAct('sync','${r.id}')">recheck sync</button><button onclick="rowAct('export','${r.id}')">export row JSON</button><button onclick="detail('${r.id}')">details</button>`}
+async function rowAct(a,id){if(a==='approve') return post('/actions/approve',{ids:id}); if(a==='reject') return post('/actions/reject',{ids:id}); if(a==='sync') return post('/actions/recheck-sync',{ids:id}); if(a==='export') return post('/actions/export-row',{id}); if(a==='publish'){await post('/actions/publish',{});}}
+function c(r,k){if(k==='status') return badge(r.status||r.launch_status||''); if(k==='actions') return actions(r); return (r[k]||'').toString().slice(0,180)}
+function detail(id){const r=rows.find(x=>x.id===id);const d=document.getElementById('drawer');d.style.display='block';d.innerHTML=`<button onclick="document.getElementById('drawer').style.display='none'">close</button><h3>Row ${id}</h3><pre>${JSON.stringify(r,null,2)}</pre>`}
+async function load(){rows=await fetch('/api/queue').then(r=>r.json());const q=rows.filter(rf);const t=document.getElementById('t'); if(!q.length){t.innerHTML='<tr><td>No rows.</td></tr>';return;} t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+q.map(r=>'<tr>'+cols.map(k=>`<td>${c(r,k)}</td>`).join('')+'</tr>').join('')}
+['collection','family','statusf','ptype','manualf'].forEach(id=>document.getElementById(id).addEventListener('change',load)); load();
 </script>
 </body></html>
