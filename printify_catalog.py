@@ -16,6 +16,13 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 class PrintifyAPIError(RuntimeError):
     """Raised when Printify returns a non-2xx response with rich diagnostics."""
 
+    def __init__(self, message: str, *, method: str = "", path: str = "", status_code: int = 0, response_body: str = "") -> None:
+        super().__init__(message)
+        self.method = method
+        self.path = path
+        self.status_code = status_code
+        self.response_body = response_body
+
 
 def _headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {os.getenv('PRINTIFY_TOKEN','')}", "Content-Type": "application/json"}
@@ -36,7 +43,32 @@ def _post(path: str, payload: dict[str, Any]) -> Any:
         except Exception:
             body = r.text
         body_text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
-        raise PrintifyAPIError(f"Printify POST {path} failed with status {r.status_code}: {body_text}")
+        raise PrintifyAPIError(
+            f"Printify POST {path} failed with status {r.status_code}: {body_text}",
+            method="POST",
+            path=path,
+            status_code=r.status_code,
+            response_body=body_text,
+        )
+    return r.json()
+
+
+def _get_safe(path: str) -> Any:
+    r = requests.get(f"{BASE}{path}", headers=_headers(), timeout=30)
+    if r.status_code >= 400:
+        body: Any
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text
+        body_text = body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)
+        raise PrintifyAPIError(
+            f"Printify GET {path} failed with status {r.status_code}: {body_text}",
+            method="GET",
+            path=path,
+            status_code=r.status_code,
+            response_body=body_text,
+        )
     return r.json()
 
 
@@ -70,3 +102,8 @@ def publish_product(shop_id: str, product_id: str) -> dict[str, Any]:
 def get_product(shop_id: str, product_id: str) -> dict[str, Any]:
     data = _get(f"/shops/{shop_id}/products/{product_id}.json")
     return data if isinstance(data, dict) else {}
+
+
+def list_shops() -> list[dict[str, Any]]:
+    data = _get_safe("/shops.json")
+    return data if isinstance(data, list) else []
