@@ -25,6 +25,11 @@ SYNC_DETAIL_LABELS = {
     "shipping_profile": "Shipping profile",
 }
 
+AUTH_HELP_MESSAGE = (
+    "Authentication appears to be missing/expired. Bootstrap a reusable Chrome session first: "
+    "--bootstrap-login --channel chrome --user-data-dir local_artifacts/printify_chrome_profile"
+)
+
 
 class SelectorNotFoundError(RuntimeError):
     """Raised when no selector strategy matched for a required UI element."""
@@ -383,6 +388,11 @@ def _ensure_out_dirs() -> tuple[Path, Path]:
     return root, shots
 
 
+def _resolve_channel(channel: str) -> str | None:
+    val = (channel or "").strip()
+    return val or None
+
+
 def _write_shopify_theme_checklist(path: Path) -> str:
     checklist = path / "shopify_theme_personalize_button_checklist.md"
     if checklist.exists():
@@ -404,22 +414,26 @@ def _write_shopify_theme_checklist(path: Path) -> str:
 def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
     rows = load_rows()
     checklist = _load_checklist_rows(args.checklist_csv)
-    targets = _resolve_targets(
-        rows,
-        checklist,
-        listing_slugs=set(args.listing_slug or []),
-        row_ids=set(args.row_id or []),
-        manual_required_synced_only=args.manual_required_synced_only,
-    )
-    if not targets:
-        raise ValueError("No targets found. Provide --listing-slug / --row-id / --manual-required-synced-only.")
+    targets: list[AutomationTarget] = []
+    if not args.bootstrap_login:
+        targets = _resolve_targets(
+            rows,
+            checklist,
+            listing_slugs=set(args.listing_slug or []),
+            row_ids=set(args.row_id or []),
+            manual_required_synced_only=args.manual_required_synced_only,
+        )
+        if not targets:
+            raise ValueError("No targets found. Provide --listing-slug / --row-id / --manual-required-synced-only.")
 
     output_root, shots_root = _ensure_out_dirs()
     theme_checklist_path = _write_shopify_theme_checklist(output_root)
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     report_rows: list[dict[str, Any]] = []
 
-    if args.dry_run and args.screenshot_only:
+    if args.bootstrap_login:
+        mode = "bootstrap_login"
+    elif args.dry_run and args.screenshot_only:
         mode = "dry_run_screenshot_only"
     elif args.dry_run:
         mode = "dry_run"
@@ -427,19 +441,64 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
         mode = "live"
 
     page = context = browser = playwright = None
-    if not args.plan_only:
+    if args.bootstrap_login or not args.plan_only:
         try:
             from playwright.sync_api import sync_playwright
         except Exception as exc:  # pragma: no cover - environment dependent
             raise RuntimeError("Playwright is required. Install with `pip install playwright` and `playwright install chromium`.") from exc
 
         playwright = sync_playwright().start()
-        browser = playwright.chromium.launch(headless=args.headless)
-        context_kwargs: dict[str, Any] = {}
-        if args.storage_state and Path(args.storage_state).exists():
-            context_kwargs["storage_state"] = args.storage_state
-        context = browser.new_context(**context_kwargs)
-        page = context.new_page()
+        channel = _resolve_channel(args.channel)
+        if args.user_data_dir:
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=args.user_data_dir,
+                headless=False if args.bootstrap_login else args.headless,
+                channel=channel,
+            )
+            page = context.pages[0] if context.pages else context.new_page()
+        else:
+            browser = playwright.chromium.launch(headless=args.headless, channel=channel)
+            context_kwargs: dict[str, Any] = {}
+            if args.storage_state and Path(args.storage_state).exists():
+                context_kwargs["storage_state"] = args.storage_state
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
+
+        if args.bootstrap_login:
+            if not args.user_data_dir:
+                raise ValueError("--bootstrap-login requires --user-data-dir so the login session can persist.")
+            page.goto("https://printify.com/app/login", wait_until="domcontentloaded", timeout=args.timeout_ms)
+            _wait_for_enter(
+                "Complete Printify/Google login in the opened browser window. Press Enter here when login is complete..."
+            )
+            shot = shots_root / f"{run_id}_bootstrap_login.png"
+            page.screenshot(path=str(shot), full_page=True)
+            report_rows.append(
+                {
+                    "id": "bootstrap_login",
+                    "listing_slug": "bootstrap_login",
+                    "printify_product_id": "",
+                    "mode": mode,
+                    "started_at": now_iso(),
+                    "finished_at": now_iso(),
+                    "ui_automation_status": "completed",
+                    "ui_automation_last_result": "bootstrap_login_complete",
+                    "ui_automation_screenshot_paths": [str(shot)],
+                    "selector_diagnostics": {},
+                    "readiness_diagnostics": {},
+                    "action_log": [
+                        {
+                            "ts": now_iso(),
+                            "step": "bootstrap_login",
+                            "detail": {
+                                "channel": channel,
+                                "user_data_dir": args.user_data_dir,
+                                "login_url": "https://printify.com/app/login",
+                            },
+                        }
+                    ],
+                }
+            )
 
     try:
         for t in targets[: args.limit or len(targets)]:
@@ -478,8 +537,13 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     if readiness_diagnostics.get("auth_redirect_detected"):
                         status = "auth_required"
                         result = "auth_required"
-                        diag = "redirected_to_login" if readiness_diagnostics.get("final_url") else "auth_required"
+                        diag = (
+                            f"{'redirected_to_login' if readiness_diagnostics.get('final_url') else 'auth_required'}; "
+                            f"{AUTH_HELP_MESSAGE}"
+                        )
                         action_log.append({"ts": now_iso(), "step": "auth_required", "detail": readiness_diagnostics})
+                        action_log.append({"ts": now_iso(), "step": "auth_help", "detail": AUTH_HELP_MESSAGE})
+                        print(AUTH_HELP_MESSAGE)
                         raise RuntimeError("auth_required")
 
                     if not readiness_diagnostics.get("ready_for_probing"):
@@ -686,6 +750,9 @@ def main() -> None:
     p.add_argument("--headless", action="store_true")
     p.add_argument("--confirm-each", action="store_true")
     p.add_argument("--storage-state", default="")
+    p.add_argument("--channel", default="", help="Optional branded browser channel, e.g. chrome or msedge")
+    p.add_argument("--user-data-dir", default="", help="Launch persistent context with this browser profile directory")
+    p.add_argument("--bootstrap-login", action="store_true", help="Open Printify login and pause for manual Google sign-in")
     p.add_argument("--timeout-ms", type=int, default=15000)
     p.add_argument("--readiness-timeout-ms", type=int, default=30000)
     p.add_argument("--pause-after-open", action="store_true")

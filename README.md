@@ -38,12 +38,18 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 - Tote publishing remains blocked for any legacy tote rows until profile mapping is finalized with blueprint/provider/variant IDs.
 
 ## Printify UI automation (Phase 8)
-- Use `python run_queue.py --ui-automation --ui-listing-slug <slug> --dry-run --ui-screenshot-only --ui-headless` for a safe selector/screenshot pass on one listing.
-- Or target a row: `python run_queue.py --ui-automation --ui-row-id <id> --dry-run --ui-headless`.
-- Or scope to operational queue rows only: `python run_queue.py --ui-automation --ui-manual-required-synced-only --dry-run --ui-headless`.
-- Live mode for a single product: remove `--dry-run` and `--ui-screenshot-only`.
+- One-time bootstrap login for Google-based auth (persistent Chrome profile):
+  - `python run_queue.py --ui-automation --ui-bootstrap-login --ui-channel chrome --ui-user-data-dir local_artifacts/printify_chrome_profile`
+- Normal dry-run with persistent profile:
+  - `python run_queue.py --ui-automation --ui-row-id <id> --dry-run --ui-headless --ui-channel chrome --ui-user-data-dir local_artifacts/printify_chrome_profile`
+- Live run with persistent profile:
+  - `python run_queue.py --ui-automation --ui-row-id <id> --ui-channel chrome --ui-user-data-dir local_artifacts/printify_chrome_profile`
+- You can also use `--ui-channel msedge` when Edge is preferred.
+- Legacy state-file flow is still available via `--ui-storage-state`, but persistent profiles are recommended for Google sign-in reliability.
+- Explicit targeting remains required for real UI automation (`--ui-row-id`, `--ui-listing-slug`, or `--ui-manual-required-synced-only`).
+- Dry-run still performs no publish click; `--ui-screenshot-only` remains non-clicking selector/screenshot probing.
 - Artifacts are written to `out/printify_ui_automation/`:
   - run report JSON/CSV
   - before/after screenshots
   - one-time `shopify_theme_personalize_button_checklist.md` reminder for the Printify Personalize Button app block in Shopify theme editor.
-- Safety controls: explicit targeting required, selector probes fail-fast, optional non-headless `--ui-confirm-each` pause before publish click.
+- Safety controls: selector probes fail-fast, optional non-headless `--ui-confirm-each` pause before publish click.
