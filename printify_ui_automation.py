@@ -253,6 +253,7 @@ def _page_readiness_probe(page: Any, *, timeout_ms: int) -> dict[str, Any]:
 class AutomationTarget:
     row_id: str
     listing_slug: str
+    listing_title: str
     printify_product_id: str
     should_enable_personalization: bool
     personalization_toggle_manual_required: bool
@@ -339,9 +340,10 @@ def _resolve_targets(
 
         out.append(
             AutomationTarget(
-                row_id=row.get("id", ""),
-                listing_slug=row.get("listing_slug", ""),
-                printify_product_id=row.get("printify_product_id", ""),
+                row_id=(row.get("id", "") or "").strip(),
+                listing_slug=(row.get("listing_slug", "") or "").strip(),
+                listing_title=(row.get("listing_title") or row.get("title") or checklist.get("title") or "").strip(),
+                printify_product_id=(row.get("printify_product_id") or checklist.get("printify_product_id") or "").strip(),
                 should_enable_personalization=_truthy(
                     row.get("should_enable_personalization")
                     or checklist.get("should_enable_personalization")
@@ -373,8 +375,14 @@ def _resolve_targets(
     return out
 
 
-def _product_url(product_id: str) -> str:
-    return f"https://printify.com/app/products/{product_id}"
+def _target_diagnostics(target: AutomationTarget) -> dict[str, str]:
+    product_id = (target.printify_product_id or "").strip()
+    return {
+        "target_row_id": target.row_id,
+        "target_listing_slug": target.listing_slug,
+        "resolved_printify_product_id": product_id,
+        "target_product_url": f"https://printify.com/app/store/products/{product_id}" if product_id else "",
+    }
 
 
 def _wait_for_enter(message: str) -> None:
@@ -569,10 +577,26 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
             result = "no_actions"
             diag = ""
             try:
-                if not t.printify_product_id:
-                    raise RuntimeError("Missing printify_product_id")
-                product_url = _product_url(t.printify_product_id)
-                action_log.append({"ts": now_iso(), "step": "target_loaded", "detail": {"url": product_url, "mode": mode}})
+                target_diagnostics = _target_diagnostics(t)
+                action_log.append({"ts": now_iso(), "step": "target_resolved", "detail": target_diagnostics})
+
+                if not target_diagnostics["resolved_printify_product_id"]:
+                    status = "failed"
+                    result = "missing_printify_product_id"
+                    diag = json.dumps(target_diagnostics, ensure_ascii=False)
+                    action_log.append(
+                        {
+                            "ts": now_iso(),
+                            "step": "target_validation_failed",
+                            "detail": {
+                                "reason": "missing_printify_product_id",
+                                **target_diagnostics,
+                            },
+                        }
+                    )
+                    raise RuntimeError("missing_printify_product_id")
+
+                product_url = target_diagnostics["target_product_url"]
 
                 if args.plan_only:
                     status = "planned"
@@ -725,16 +749,22 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 action_log.append({"ts": now_iso(), "step": "selector_no_match", "detail": {"selector": exc.key, "attempts": exc.attempts}})
 
             except Exception as exc:
-                if str(exc) not in {"auth_required", "page_not_ready"}:
+                if str(exc) not in {"auth_required", "page_not_ready", "missing_printify_product_id"}:
                     status = "failed"
                     result = "selector_or_runtime_failure"
                     diag = str(exc)
                     action_log.append({"ts": now_iso(), "step": "error", "detail": diag})
 
+            target_diagnostics = _target_diagnostics(t)
             row_record = {
                 "id": t.row_id,
                 "listing_slug": t.listing_slug,
+                "listing_title": t.listing_title,
                 "printify_product_id": t.printify_product_id,
+                "target_row_id": target_diagnostics["target_row_id"],
+                "target_listing_slug": target_diagnostics["target_listing_slug"],
+                "resolved_printify_product_id": target_diagnostics["resolved_printify_product_id"],
+                "target_product_url": target_diagnostics["target_product_url"],
                 "mode": mode,
                 "started_at": started,
                 "finished_at": now_iso(),
