@@ -25,6 +25,115 @@ SYNC_DETAIL_LABELS = {
 }
 
 
+class SelectorNotFoundError(RuntimeError):
+    """Raised when no selector strategy matched for a required UI element."""
+
+    def __init__(self, key: str, attempts: list[dict[str, Any]]):
+        super().__init__(f"No selector matched for '{key}'")
+        self.key = key
+        self.attempts = attempts
+
+
+def _safe_count(locator: Any) -> int:
+    try:
+        return locator.count()
+    except Exception:
+        return 0
+
+
+def _selector_probe(page: Any, key: str, strategies: list[dict[str, Any]], *, required: bool = False) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    for strategy in strategies:
+        name = strategy.get("name", "unnamed")
+        factory = strategy.get("locator")
+        if not callable(factory):
+            attempts.append({"strategy": name, "matched": False, "error": "locator_factory_missing"})
+            continue
+        try:
+            loc = factory(page)
+            count = _safe_count(loc)
+            matched = count > 0
+            attempt: dict[str, Any] = {"strategy": name, "matched": matched, "count": count}
+            if matched:
+                attempt["selected"] = True
+                attempts.append(attempt)
+                return {"key": key, "matched": True, "selected_strategy": name, "locator": loc, "attempts": attempts}
+            attempts.append(attempt)
+        except Exception as exc:
+            attempts.append({"strategy": name, "matched": False, "error": str(exc)})
+
+    if required:
+        raise SelectorNotFoundError(key, attempts)
+    return {"key": key, "matched": False, "selected_strategy": None, "locator": None, "attempts": attempts}
+
+
+def _personalization_toggle_probe(page: Any) -> dict[str, Any]:
+    return _selector_probe(
+        page,
+        "personalization_toggle",
+        [
+            {"name": "primary_css_label_text", "locator": lambda p: p.locator('label:has-text("Personalization")').first},
+            {"name": "secondary_text_regex", "locator": lambda p: p.get_by_text("Enable personalization", exact=False).first},
+            {"name": "text_based_any", "locator": lambda p: p.locator("text=/personalization/i").first},
+            {"name": "role_switch_name", "locator": lambda p: p.get_by_role("switch", name="Personalization", exact=False).first},
+        ],
+    )
+
+
+def _variant_visibility_probe(page: Any) -> dict[str, Any]:
+    return _selector_probe(
+        page,
+        "variant_visibility_in_stock_only",
+        [
+            {"name": "primary_text_exact", "locator": lambda p: p.get_by_text("In stock only", exact=False).first},
+            {"name": "secondary_label", "locator": lambda p: p.get_by_label("In stock only", exact=False).first},
+            {"name": "text_regex", "locator": lambda p: p.locator("text=/in stock only/i").first},
+            {"name": "role_radio", "locator": lambda p: p.get_by_role("radio", name="In stock only", exact=False).first},
+        ],
+    )
+
+
+def _sync_detail_probe(page: Any, label: str) -> dict[str, Any]:
+    return _selector_probe(
+        page,
+        f"sync_detail_{label}",
+        [
+            {"name": "primary_label_text", "locator": lambda p: p.locator(f'label:has-text("{label}")').first},
+            {"name": "secondary_get_by_label", "locator": lambda p: p.get_by_label(label, exact=False).first},
+            {"name": "text_based", "locator": lambda p: p.get_by_text(label, exact=False).first},
+            {"name": "role_checkbox", "locator": lambda p: p.get_by_role("checkbox", name=label, exact=False).first},
+        ],
+    )
+
+
+def _publish_area_probe(page: Any) -> dict[str, Any]:
+    return _selector_probe(
+        page,
+        "publish_area",
+        [
+            {"name": "primary_text_publish_settings", "locator": lambda p: p.get_by_text("Publishing settings", exact=False).first},
+            {"name": "secondary_text_select_sync", "locator": lambda p: p.get_by_text("Select details for sync", exact=False).first},
+            {"name": "text_regex_publish", "locator": lambda p: p.locator("text=/Publishing settings|Select details for sync|Publish/i").first},
+            {"name": "role_heading_publish", "locator": lambda p: p.get_by_role("heading", name="Publish", exact=False).first},
+        ],
+        required=True,
+    )
+
+
+def _publish_button_probe(page: Any) -> dict[str, Any]:
+    return _selector_probe(
+        page,
+        "publish_button",
+        [
+            {"name": "primary_republish", "locator": lambda p: p.get_by_role("button", name="Republish", exact=False).first},
+            {"name": "secondary_publish", "locator": lambda p: p.get_by_role("button", name="Publish", exact=False).first},
+            {"name": "text_button_regex", "locator": lambda p: p.locator("button:has-text('Republish')").first},
+            {"name": "text_based_fallback", "locator": lambda p: p.locator("text=/Republish|Publish/i").first},
+        ],
+        required=True,
+    )
+
+
 @dataclass
 class AutomationTarget:
     row_id: str
@@ -232,6 +341,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
             started = now_iso()
             action_log: list[dict[str, Any]] = []
             screenshot_paths: list[str] = []
+            selector_diagnostics: dict[str, Any] = {}
             status = "skipped"
             result = "no_actions"
             diag = ""
@@ -250,13 +360,31 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     page.screenshot(path=str(before), full_page=True)
                     screenshot_paths.append(str(before))
 
-                    personalization_toggle = page.locator('label:has-text("Personalization"), text=/Enable personalization/i').first
-                    publish_section = page.locator('text=/Publishing settings|Select details for sync|Publish/i').first
-                    has_toggle = personalization_toggle.count() > 0
-                    has_publish = publish_section.count() > 0
-                    action_log.append({"ts": now_iso(), "step": "selector_probe", "detail": {"has_personalization_toggle": has_toggle, "has_publish_area": has_publish}})
-                    if not has_publish:
-                        raise RuntimeError("Could not locate publishing/selective sync area safely")
+                    personalization_toggle_probe = _personalization_toggle_probe(page)
+                    publish_area_probe = _publish_area_probe(page)
+                    selector_diagnostics["personalization_toggle"] = {
+                        "matched": personalization_toggle_probe["matched"],
+                        "selected_strategy": personalization_toggle_probe["selected_strategy"],
+                        "attempts": personalization_toggle_probe["attempts"],
+                    }
+                    selector_diagnostics["publish_area"] = {
+                        "matched": publish_area_probe["matched"],
+                        "selected_strategy": publish_area_probe["selected_strategy"],
+                        "attempts": publish_area_probe["attempts"],
+                    }
+                    action_log.append(
+                        {
+                            "ts": now_iso(),
+                            "step": "selector_probe",
+                            "detail": {
+                                "personalization_toggle": selector_diagnostics["personalization_toggle"],
+                                "publish_area": selector_diagnostics["publish_area"],
+                            },
+                        }
+                    )
+
+                    personalization_toggle = personalization_toggle_probe.get("locator")
+                    has_toggle = bool(personalization_toggle_probe.get("matched"))
 
                     if has_toggle and t.should_enable_personalization and not args.screenshot_only:
                         try:
@@ -272,16 +400,42 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     if t.variant_visibility_recommended == "in_stock_only":
                         action_log.append({"ts": now_iso(), "step": "variant_visibility_recommended", "detail": "in_stock_only"})
                         if not args.screenshot_only:
-                            in_stock_option = page.locator('text=/In stock only/i').first
-                            if in_stock_option.count() > 0:
+                            in_stock_probe = _variant_visibility_probe(page)
+                            selector_diagnostics["variant_visibility_in_stock_only"] = {
+                                "matched": in_stock_probe["matched"],
+                                "selected_strategy": in_stock_probe["selected_strategy"],
+                                "attempts": in_stock_probe["attempts"],
+                            }
+                            action_log.append({"ts": now_iso(), "step": "variant_visibility_probe", "detail": selector_diagnostics["variant_visibility_in_stock_only"]})
+                            in_stock_option = in_stock_probe.get("locator")
+                            if in_stock_probe.get("matched") and in_stock_option is not None:
                                 in_stock_option.click(timeout=2000)
                                 action_log.append({"ts": now_iso(), "step": "variant_visibility_set", "detail": "in_stock_only_clicked"})
 
                     for detail in t.sync_details_recommended:
                         label = SYNC_DETAIL_LABELS.get(detail, detail)
-                        box = page.locator(f'label:has-text("{label}"), text=/{label}/i').first
-                        found = box.count() > 0
-                        action_log.append({"ts": now_iso(), "step": "sync_detail_probe", "detail": {"detail": detail, "label": label, "found": found}})
+                        detail_probe = _sync_detail_probe(page, label)
+                        selector_key = f"sync_detail::{detail}"
+                        selector_diagnostics[selector_key] = {
+                            "matched": detail_probe["matched"],
+                            "selected_strategy": detail_probe["selected_strategy"],
+                            "attempts": detail_probe["attempts"],
+                        }
+                        box = detail_probe.get("locator")
+                        found = bool(detail_probe.get("matched"))
+                        action_log.append(
+                            {
+                                "ts": now_iso(),
+                                "step": "sync_detail_probe",
+                                "detail": {
+                                    "detail": detail,
+                                    "label": label,
+                                    "found": found,
+                                    "selected_strategy": detail_probe["selected_strategy"],
+                                    "attempts": detail_probe["attempts"],
+                                },
+                            }
+                        )
                         if found and not args.screenshot_only:
                             try:
                                 box.click(timeout=2000)
@@ -293,8 +447,15 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                         _wait_for_enter(f"Review product {t.listing_slug} in browser; press Enter to continue...")
 
                     if not args.dry_run and not args.screenshot_only:
-                        publish_btn = page.locator('button:has-text("Republish"), button:has-text("Publish")').first
-                        if publish_btn.count() == 0:
+                        publish_btn_probe = _publish_button_probe(page)
+                        selector_diagnostics["publish_button"] = {
+                            "matched": publish_btn_probe["matched"],
+                            "selected_strategy": publish_btn_probe["selected_strategy"],
+                            "attempts": publish_btn_probe["attempts"],
+                        }
+                        action_log.append({"ts": now_iso(), "step": "publish_button_probe", "detail": selector_diagnostics["publish_button"]})
+                        publish_btn = publish_btn_probe.get("locator")
+                        if publish_btn is None:
                             raise RuntimeError("Publish/Republish button not found")
                         publish_btn.click(timeout=args.timeout_ms)
                         action_log.append({"ts": now_iso(), "step": "publish_clicked", "detail": "publish_or_republish"})
@@ -304,6 +465,13 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     screenshot_paths.append(str(after))
                     status = "completed"
                     result = "dry_run_complete" if args.dry_run else "live_complete"
+
+            except SelectorNotFoundError as exc:
+                status = "failed"
+                result = "selector_no_match"
+                diag = str(exc)
+                selector_diagnostics[exc.key] = {"matched": False, "selected_strategy": None, "attempts": exc.attempts}
+                action_log.append({"ts": now_iso(), "step": "selector_no_match", "detail": {"selector": exc.key, "attempts": exc.attempts}})
 
             except Exception as exc:
                 status = "failed"
@@ -321,6 +489,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 "ui_automation_status": status,
                 "ui_automation_last_result": result if not diag else f"{result}: {diag}",
                 "ui_automation_screenshot_paths": screenshot_paths,
+                "selector_diagnostics": selector_diagnostics,
                 "action_log": action_log,
             }
             report_rows.append(row_record)
