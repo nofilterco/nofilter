@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -244,6 +245,37 @@ def _collect_error_strings(payload: Any, *, max_items: int = 8) -> list[str]:
     return found[:max_items]
 
 
+
+
+def _is_transient_publish_error(exc: PrintifyAPIError) -> bool:
+    body = (exc.response_body or "").lower()
+    return exc.status_code == 429 or "too many" in body or "rate" in body
+
+
+def _publish_with_backoff(shop_id: str, product_id: str, row: dict[str, str], *, max_attempts: int = 4, spacing_s: float = 0.6) -> dict[str, Any]:
+    last_exc: PrintifyAPIError | None = None
+    for attempt in range(1, max_attempts + 1):
+        row["publish_attempt_count"] = str(attempt)
+        try:
+            resp = printify_publish(shop_id, product_id)
+            row["publish_retry_eligible"] = "NO"
+            return resp
+        except PrintifyAPIError as exc:
+            last_exc = exc
+            transient = _is_transient_publish_error(exc)
+            row["publish_retry_eligible"] = "YES" if transient else "NO"
+            if transient and attempt < max_attempts:
+                wait_s = spacing_s * (2 ** (attempt - 1))
+                row["error_stage"] = "PUBLISH"
+                row["error_message"] = f"Publish throttled (429/transient). Retrying in {wait_s:.1f}s (attempt {attempt}/{max_attempts})."
+                row["last_publish_response"] = json.dumps({"status": exc.status_code, "body": exc.response_body, "retry_in_s": wait_s, "attempt": attempt}, ensure_ascii=False)[:5000]
+                time.sleep(wait_s)
+                continue
+            raise
+    if last_exc:
+        raise last_exc
+    return {}
+
 def _extract_shopify_identity_from_printify_product(product: dict[str, Any]) -> tuple[str, str]:
     external = product.get("external") if isinstance(product.get("external"), dict) else {}
     sales_channel = product.get("sales_channel_properties") if isinstance(product.get("sales_channel_properties"), dict) else {}
@@ -369,14 +401,20 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False, debug: bool =
         return row
 
     try:
-        created = create_product(shop_id, payload)
-        row["printify_product_id"] = str(created.get("id", ""))
-        row["last_publish_response"] = json.dumps(created, ensure_ascii=False)[:5000]
+        existing_product_id = (row.get("printify_product_id") or "").strip()
+        if existing_product_id:
+            row["printify_product_id"] = existing_product_id
+            row["last_publish_response"] = json.dumps({"reused_printify_product_id": existing_product_id}, ensure_ascii=False)[:5000]
+        else:
+            created = create_product(shop_id, payload)
+            row["printify_product_id"] = str(created.get("id", ""))
+            row["last_publish_response"] = json.dumps(created, ensure_ascii=False)[:5000]
         row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY" if row["printify_product_id"] else "PUBLISH_FAILED"
         if row.get("publish_mode") in ("personalized", "both"):
             row["needs_manual_personalization_setup"] = "YES"
         if row["printify_product_id"]:
-            publish_resp = printify_publish(shop_id, row["printify_product_id"])
+            time.sleep(0.45)
+            publish_resp = _publish_with_backoff(shop_id, row["printify_product_id"], row)
             row["last_publish_response"] = json.dumps(publish_resp, ensure_ascii=False)[:5000]
             row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
             _sync_status_check(row, shop_id)
@@ -384,6 +422,7 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False, debug: bool =
             row["launch_status"] = "PUBLISHED_TO_PRINTIFY"
             row["error_stage"] = ""
             row["error_message"] = ""
+            row["publish_retry_eligible"] = "NO"
         else:
             _set_publish_failure(row, stage="PUBLISH", message="Printify create_product returned no id")
     except PrintifyAPIError as exc:
@@ -394,9 +433,11 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False, debug: bool =
             "body": exc.response_body,
             "payload_summary": payload_summary,
         }
+        row["publish_retry_eligible"] = "YES" if _is_transient_publish_error(exc) else "NO"
         _set_publish_failure(row, stage="PRINTIFY_API", message=str(exc), response=response)
     except Exception as exc:
         response = {"error": str(exc), "payload_summary": payload_summary}
+        row["publish_retry_eligible"] = "NO"
         _set_publish_failure(row, stage="PUBLISH", message=f"Unexpected publish error: {exc}", response=response)
 
     if debug:

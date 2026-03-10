@@ -9,7 +9,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from catalog_assets import build_placeholder_asset, build_storefront_preview_set, default_placeholder_text, resolve_art_strategy
+from catalog_assets import build_placeholder_asset, build_storefront_preview_set, default_placeholder_text, resolve_art_strategy, style_variant_for_listing
 from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
 from catalog_config import catalog_indexes, load_catalog
 from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, load_rows, next_id, save_rows
@@ -32,12 +32,15 @@ def _append_publish_log(row: dict[str, Any], event: str, detail: str = "") -> No
 
 def _buyer_schema_for_listing(item: dict[str, Any], tpl: dict[str, Any], placeholder_text: str) -> dict[str, Any]:
     text_fields = item.get("personalization_fields") or tpl.get("personalization_fields") or []
+    image_fields = item.get("image_upload_fields") or tpl.get("image_upload_fields") or []
+    logo_fields = item.get("logo_upload_fields") or tpl.get("logo_upload_fields") or []
     return {
         "text_fields": text_fields,
-        "image_fields": item.get("image_upload_fields") or tpl.get("image_upload_fields") or [],
-        "logo_fields": item.get("logo_upload_fields") or tpl.get("logo_upload_fields") or [],
+        "image_fields": image_fields,
+        "logo_fields": logo_fields,
         "helper_text": tpl.get("personalization_instructions", ""),
         "placeholder_preview": placeholder_text,
+        "customer_can_edit_summary": f"Text: {len(text_fields)} fields | Image uploads: {len(image_fields)} | Logo uploads: {len(logo_fields)}",
     }
 
 
@@ -96,6 +99,8 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
         pf = profile.get("product_family", "")
         strategy = resolve_art_strategy(item.get("template_family", tpl.get("template_family", "text_only")), slug, pf)
         preview_text = default_placeholder_text(slug, item.get("template_family", tpl.get("template_family", "text_only")))
+        style_variant = item.get("style_variant") or style_variant_for_listing(slug, item.get("template_family", tpl.get("template_family", "text_only")))
+        buyer_schema = _buyer_schema_for_listing(item, tpl, preview_text)
         row.update({
             "id": str(start + len(out)), "status": "DRAFT", "pipeline_stage": "SEEDED", "store_brand": "Crafted Occasion",
             "collection_slug": coll_slug, "collection_title": coll["title"], "shopify_collection_tag": coll["shopify_tag"],
@@ -106,12 +111,12 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "image_upload_fields_json": json.dumps(item.get("image_upload_fields", tpl.get("image_upload_fields", []))),
             "logo_upload_fields_json": json.dumps(item.get("logo_upload_fields", tpl.get("logo_upload_fields", []))),
             "text_fields_json": json.dumps(item.get("text_fields", tpl.get("text_fields", []))),
-            "buyer_personalization_schema_json": json.dumps(_buyer_schema_for_listing(item, tpl, preview_text)),
+            "buyer_personalization_schema_json": json.dumps(buyer_schema),
             "internal_workflow_metadata_json": json.dumps({**tpl.get("internal_workflow_metadata", {}), "art_strategy": strategy}),
             "personalization_instructions": tpl.get("personalization_instructions", "Manual personalization review may be required."),
             "title": build_title(item, tpl), "seo_title": build_seo_title(item, tpl), "description_html": build_description_html(item, tpl),
             "tags_csv": build_tags_csv(item, coll, tpl, profile), "shopify_tags_csv": coll["shopify_tag"],
-            "placeholder_art_mode": strategy, "placeholder_art_text": preview_text,
+            "placeholder_art_mode": strategy, "placeholder_art_text": preview_text, "style_variant": style_variant,
             "enabled_sizes_json": json.dumps(item.get("launch_visible_sizes", profile.get("launch_visible_sizes", []))),
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", coll.get("default_visible_colors", [])))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
@@ -120,6 +125,7 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "profile_resolved": "", "blueprint_id": "0", "provider_id": "0", "matched_variant_count": "0",
             "enabled_variant_count_before_filter": "0", "enabled_variant_count_after_filter": "0",
             "publish_log_history_json": json.dumps([{"ts": now_iso(), "event": "SEEDED", "detail": slug}]), "debug_trace": f"{now_iso()}:seeded",
+            "customer_editable_summary": buyer_schema.get("customer_can_edit_summary", ""), "publish_retry_eligible": "NO", "publish_attempt_count": "0",
         })
         _apply_merch(row, coll)
         resolve_profile(row, profile)
@@ -142,6 +148,7 @@ def build_assets_for_rows(limit: int = 0) -> int:
         row["asset_local_path"] = build_placeholder_asset(row.get("placeholder_art_text") or row["listing_title"], row["listing_slug"], product_family=row.get("product_family", "tee"), art_strategy=row.get("placeholder_art_mode", "stacked_text"), collection_slug=row.get("collection_slug", "family-reunion"), style_pack=tpl.get("style_pack", row.get("collection_slug", "")), contrast_mode=tpl.get("contrast_mode", "auto"), blank_color=(json.loads(row.get("enabled_colors_json") or "[]") or ["White"])[0], product_safe_area=safe_areas.get(row.get("product_family", "tee"), {}))
         preview = build_storefront_preview_set(row)
         row["preview_style"] = preview["preview_style"]
+        row["style_variant"] = preview.get("style_variant", row.get("style_variant", ""))
         row["preview_artifacts_json"] = json.dumps(preview)
         row["pipeline_stage"] = "ASSET_BUILT"; row["status"] = "READY_FOR_REVIEW"
         _append_publish_log(row, "ASSET_BUILT", row["asset_local_path"])
@@ -230,7 +237,7 @@ def export_row_json(row_id: str, out_dir: str = "out") -> str:
     return str(path)
 
 
-def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "", debug_slug: str = "", verbose_debug: bool = False) -> int:
+def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "", debug_slug: str = "", verbose_debug: bool = False, retry_publish_failures_only: bool = False) -> int:
     rows = load_rows(); idx = catalog_indexes(load_catalog()); count = 0; published = 0
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "").strip()
     shop_valid = True
@@ -243,7 +250,15 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
             shop_error = f"Unable to validate Printify shop access: {exc}"
 
     for row in rows:
-        if row["status"] != "APPROVED": continue
+        if retry_publish_failures_only:
+            err = f"{row.get('error_message','')} {row.get('last_publish_response','')} {row.get('printify_publish_error','')}".lower()
+            transient = any(t in err for t in ["429", "too many", "rate limit", "throttle"])
+            eligible = row.get("status") == "PUBLISH_FAILED" and bool(row.get("printify_product_id")) and transient
+            row["publish_retry_eligible"] = "YES" if eligible else row.get("publish_retry_eligible", "NO")
+            if not eligible:
+                continue
+        elif row["status"] != "APPROVED":
+            continue
         if debug_slug and row.get("listing_slug") != debug_slug: continue
         profile = idx["profiles"].get(row.get("product_profile_id", ""), {})
         resolve_profile(row, profile); resolve_variants(row, profile)
@@ -299,7 +314,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description="Crafted Occasion catalog queue runner")
     p.add_argument("--seed-launch", action="store_true"); p.add_argument("--collection", default=""); p.add_argument("--family", default="")
     p.add_argument("--build-assets", action="store_true"); p.add_argument("--approve-all", action="store_true"); p.add_argument("--reject-all", action="store_true")
-    p.add_argument("--publish-approved", action="store_true"); p.add_argument("--recheck-sync", action="store_true")
+    p.add_argument("--publish-approved", action="store_true"); p.add_argument("--retry-failed-publishes", action="store_true"); p.add_argument("--recheck-sync", action="store_true")
     p.add_argument("--setup-packets", action="store_true"); p.add_argument("--export-manual-setup-only", action="store_true")
     p.add_argument("--dry-run", action="store_true"); p.add_argument("--debug-payload-title", default="")
     p.add_argument("--publish-slug", default="", help="Publish only one approved listing slug")
@@ -310,6 +325,7 @@ def main() -> None:
     if args.approve_all: print(f"approved={mark_review('APPROVED')}")
     if args.reject_all: print(f"rejected={mark_review('REJECTED')}")
     if args.publish_approved: print(f"published={publish_approved(dry_run=args.dry_run, debug_title=args.debug_payload_title, debug_slug=args.publish_slug, verbose_debug=args.publish_debug)}")
+    if args.retry_failed_publishes: print(f"retry_published={publish_approved(dry_run=args.dry_run, debug_title=args.debug_payload_title, debug_slug=args.publish_slug, verbose_debug=args.publish_debug, retry_publish_failures_only=True)}")
     if args.recheck_sync: print(f"sync_checked={recheck_sync()}")
     if args.setup_packets: print(f"setup_packets={generate_setup_packets()}")
     if args.export_manual_setup_only: print(f"manual_setup_export={dump_manual_setup_only_csv()}")

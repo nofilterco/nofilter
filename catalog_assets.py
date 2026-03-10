@@ -56,6 +56,27 @@ PREVIEW_STYLE_PRESETS: dict[str, dict[str, dict[str, Any]]] = {
     },
 }
 
+LISTING_STYLE_VARIANTS = {
+    "bridesmaid-name-role-personalized-tee": "soft_script",
+    "maid-of-honor-personalized-tee": "varsity_block",
+    "bach-weekend-personalized-tee": "western_bach",
+    "bride-crew-custom-hoodie": "monogram_frame",
+    "groom-crew-custom-hoodie": "crest_badge",
+    "family-reunion-personalized-tee": "retro_arch",
+    "cousin-crew-reunion-hoodie": "crest_badge",
+    "family-name-reunion-color-mug": "photo_postcard",
+}
+
+STYLE_VARIANT_TO_ART = {
+    "soft_script": "script_nameplate",
+    "varsity_block": "varsity_block",
+    "crest_badge": "crest_badge",
+    "retro_arch": "arch_badge",
+    "photo_postcard": "photo_postcard",
+    "monogram_frame": "monogram_frame",
+    "western_bach": "western_bach",
+}
+
 ICON_MAP = {"stars": "✦", "heart": "♥", "ring": "◌", "bow": "❦", "crest": "⬢", "laurel": "❧", "mug": "☕", "suitcase": "✈"}
 
 TEMPLATE_FAMILY_ART_STRATEGY = {
@@ -69,6 +90,9 @@ TEMPLATE_FAMILY_ART_STRATEGY = {
 
 
 def resolve_art_strategy(template_family: str, listing_slug: str = "", product_family: str = "") -> str:
+    variant = LISTING_STYLE_VARIANTS.get((listing_slug or "").lower(), "")
+    if variant:
+        return STYLE_VARIANT_TO_ART.get(variant, "stacked_text")
     family = (template_family or "text_only").strip().lower()
     slug = (listing_slug or "").lower()
     product = (product_family or "").lower()
@@ -94,6 +118,12 @@ def default_placeholder_text(listing_slug: str, template_family: str) -> str:
         return "Groom Crew\n2026"
     if "bach-weekend" in slug:
         return "Nashville\nBach Weekend"
+    if "family-reunion-personalized-tee" in slug:
+        return "Carter Family\nReunion 2026"
+    if "cousin-crew-reunion-hoodie" in slug:
+        return "Cousin Crew\nAtlanta 2026"
+    if "family-name-reunion-color-mug" in slug:
+        return "Harris Family\nPhoto + Caption"
     if "tote" in slug:
         return "Mia\nBridal Party Tote"
     if family == "monogram_badge":
@@ -135,6 +165,11 @@ def _contrast_ink(blank: str, base_ink: tuple[int, int, int, int], contrast_mode
 
 def _draw_icon(draw: ImageDraw.ImageDraw, icon: str, x: int, y: int, color: tuple[int, int, int, int], size: int) -> None:
     draw.text((x, y), ICON_MAP.get(icon, "✦"), font=_font("regular", size), fill=color)
+
+
+def style_variant_for_listing(listing_slug: str, template_family: str = "") -> str:
+    slug = (listing_slug or "").lower()
+    return LISTING_STYLE_VARIANTS.get(slug, "monogram_frame" if template_family == "monogram_badge" else "soft_script")
 
 
 def _resolve_preset(style_pack: str, collection_slug: str, slug: str) -> dict[str, int]:
@@ -197,6 +232,36 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
         yline = ty + (bb[3] - bb[1]) + int(font.size * 0.25)
         draw.line((safe[0] + int(box_w * 0.1), yline, safe[2] - int(box_w * 0.1), yline), fill=accent, width=6)
         draw.multiline_text((tx, ty), text, font=font, fill=ink, align="center")
+    elif strategy == "varsity_block":
+        font = _fit_text(draw, text.upper(), "mono", (int(box_w * 0.9), int(box_h * 0.75)), min_font, 0.92)
+        bb = draw.multiline_textbbox((0, 0), text.upper(), font=font, align="center", spacing=max(8, font.size // 6))
+        tx, ty = safe[0] + (box_w - (bb[2] - bb[0])) // 2, safe[1] + (box_h - (bb[3] - bb[1])) // 2
+        draw.multiline_text((tx + 8, ty + 8), text.upper(), font=font, fill=(*accent[:3], 160), align="center", spacing=max(8, font.size // 6))
+        draw.multiline_text((tx, ty), text.upper(), font=font, fill=ink, align="center", spacing=max(8, font.size // 6))
+    elif strategy == "crest_badge":
+        cx, cy = safe[0] + box_w // 2, safe[1] + box_h // 2
+        shield = [(cx, safe[1] + 24), (safe[2] - 26, safe[1] + int(box_h * 0.28)), (safe[2] - int(box_w * 0.18), safe[1] + int(box_h * 0.78)), (cx, safe[3] - 18), (safe[0] + int(box_w * 0.18), safe[1] + int(box_h * 0.78)), (safe[0] + 26, safe[1] + int(box_h * 0.28))]
+        draw.polygon(shield, outline=accent, fill=(*accent[:3], 30), width=8)
+        font = _fit_text(draw, text, "sans", (int(box_w * 0.6), int(box_h * 0.35)), min_font, 0.9)
+        bb = draw.multiline_textbbox((0, 0), text, font=font, align="center")
+        draw.multiline_text((cx - (bb[2] - bb[0]) // 2, cy - (bb[3] - bb[1]) // 2), text, font=font, fill=ink, align="center")
+    elif strategy == "photo_postcard":
+        draw.rounded_rectangle((safe[0], safe[1], safe[2], safe[3]), radius=24, outline=accent, width=7, fill=(*accent[:3], 22))
+        photo_box = (safe[0] + int(box_w * 0.08), safe[1] + int(box_h * 0.12), safe[2] - int(box_w * 0.08), safe[1] + int(box_h * 0.62))
+        draw.rectangle(photo_box, outline=ink, width=5)
+        draw.line((photo_box[0], photo_box[1], photo_box[2], photo_box[3]), fill=accent, width=4)
+        draw.line((photo_box[2], photo_box[1], photo_box[0], photo_box[3]), fill=accent, width=4)
+        caption = text.split("\n")[-1]
+        font = _fit_text(draw, caption, "regular", (int(box_w * 0.85), int(box_h * 0.2)), min_font - 10, 0.95)
+        draw.text((safe[0] + int(box_w * 0.1), safe[1] + int(box_h * 0.72)), caption, font=font, fill=ink)
+    elif strategy == "western_bach":
+        draw.rounded_rectangle((safe[0], safe[1] + 20, safe[2], safe[3] - 20), radius=18, outline=accent, width=6)
+        header = "BACH WEEKEND"
+        top_font = _fit_text(draw, header, "mono", (int(box_w * 0.8), int(box_h * 0.15)), min_font - 16, 0.95)
+        draw.text((safe[0] + (box_w - int(draw.textlength(header, font=top_font))) // 2, safe[1] + int(box_h * 0.08)), header, font=top_font, fill=accent)
+        body_font = _fit_text(draw, text, "sans", (int(box_w * 0.8), int(box_h * 0.45)), min_font, 0.88)
+        bb = draw.multiline_textbbox((0, 0), text, font=body_font, align="center")
+        draw.multiline_text((safe[0] + (box_w - (bb[2] - bb[0])) // 2, safe[1] + int(box_h * 0.33)), text, font=body_font, fill=ink, align="center")
     elif strategy == "monogram_frame":
         initial = "".join([p[:1].upper() for p in text.replace("\n", " ").split()[:2]]) or "CO"
         font = _fit_text(draw, initial, "mono", (int(box_w * 0.45), int(box_h * 0.45)), min_font, 0.9)
@@ -230,7 +295,10 @@ def build_storefront_preview_set(row: dict[str, Any]) -> dict[str, Any]:
     collection_slug = row.get("collection_slug", "family-reunion")
     text = row.get("placeholder_art_text") or default_placeholder_text(slug, template_family)
     fallback_strategy = row.get("placeholder_art_mode") or resolve_art_strategy(template_family, slug, product_family)
-    preset = _preview_preset(collection_slug, template_family, fallback_strategy)
+    style_variant = row.get("style_variant") or style_variant_for_listing(slug, template_family)
+    primary_style = STYLE_VARIANT_TO_ART.get(style_variant, fallback_strategy)
+    preset = _preview_preset(collection_slug, template_family, primary_style)
+    preset["primary"] = primary_style
     colors = json.loads(row.get("enabled_colors_json") or "[]")
     light_blank = colors[0] if colors else "White"
     dark_blank = next((c for c in colors if c.lower() in {"black", "navy", "maroon"}), "Black")
@@ -247,6 +315,7 @@ def build_storefront_preview_set(row: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "preview_style": preset["primary"],
+        "style_variant": style_variant,
         "primary_preview": primary,
         "alternate_preview": alternate,
         "garment_preview_dark": dark,
