@@ -22,6 +22,9 @@ fi
 
 mkdir -p local_artifacts
 
+FORCE_RESOLVE="${FORCE_RESOLVE:-0}"
+CACHED_RESOLVED_PROFILES="local_artifacts/product_profiles.resolved.yaml"
+
 echo "== Backing up current state =="
 cp queue.csv "local_artifacts/queue.pre_run.csv" 2>/dev/null || true
 cp -R reports "local_artifacts/reports.pre_run" 2>/dev/null || true
@@ -30,8 +33,15 @@ cp launch_report.json "local_artifacts/launch_report.pre_run.json" 2>/dev/null |
 cp launch_ops_review.csv "local_artifacts/launch_ops_review.pre_run.csv" 2>/dev/null || true
 cp manual_setup_required.csv "local_artifacts/manual_setup_required.pre_run.csv" 2>/dev/null || true
 
-echo "== Resolving Printify profiles =="
-python tools/fill_printify_ids.py --write-variants --debug
+if [[ -f "$CACHED_RESOLVED_PROFILES" && "$FORCE_RESOLVE" != "1" ]]; then
+  echo "== Restoring cached resolved profiles =="
+  cp "$CACHED_RESOLVED_PROFILES" catalog/product_profiles.yaml
+else
+  echo "== Running fresh Printify resolver =="
+  python tools/fill_printify_ids.py --write-variants --debug
+  cp catalog/product_profiles.yaml "$CACHED_RESOLVED_PROFILES"
+  echo "== Saved resolved profiles cache to $CACHED_RESOLVED_PROFILES =="
+fi
 
 echo "== Verifying resolved profiles =="
 python - <<'PY'
@@ -60,8 +70,6 @@ if bad:
     print(f"ERROR: unresolved required profiles: {', '.join(bad)}")
     sys.exit(1)
 PY
-
-cp catalog/product_profiles.yaml "local_artifacts/product_profiles.resolved.yaml"
 
 echo "== Clearing queue =="
 rm -f queue.csv
