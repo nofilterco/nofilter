@@ -25,70 +25,109 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _parse_positive_int(value: Any) -> int:
+    try:
+        parsed = int(str(value).strip())
+        return parsed if parsed > 0 else 0
+    except Exception:
+        return 0
+
+
+def _profile_resolution_details(profile: dict[str, Any], row: dict[str, str]) -> tuple[bool, int, int, list[int], str]:
+    hints = profile.get("printify_blueprint_hints") if isinstance(profile.get("printify_blueprint_hints"), dict) else {}
+    meta = profile.get("full_catalog_metadata") if isinstance(profile.get("full_catalog_metadata"), dict) else {}
+    blueprint_id = _parse_positive_int(row.get("printify_blueprint_id") or hints.get("blueprint_id"))
+    provider_id = _parse_positive_int(row.get("printify_provider_id") or hints.get("provider_id"))
+    raw_ids = meta.get("matched_variant_ids") or meta.get("printify_variant_ids") or []
+    matched_ids = [_parse_positive_int(v) for v in raw_ids]
+    matched_ids = [v for v in matched_ids if v > 0]
+
+    missing: list[str] = []
+    if blueprint_id <= 0:
+        missing.append("blueprint")
+    if provider_id <= 0:
+        missing.append("provider")
+    if not matched_ids:
+        missing.append("variant IDs")
+
+    return (len(missing) == 0), blueprint_id, provider_id, matched_ids, ", ".join(missing)
+
+
 def resolve_profile(row: dict[str, str], profile: dict[str, Any]) -> dict[str, Any]:
     row["product_family"] = profile.get("product_family", "")
     row["shopify_product_type"] = profile.get("default_shopify_product_type", "")
     row["personalization_mode"] = profile.get("personalization_capability", "none")
-    hints = profile.get("printify_blueprint_hints", {})
-    if not row.get("printify_blueprint_id"):
-        row["printify_blueprint_id"] = str(hints.get("blueprint_id", ""))
-    if not row.get("printify_provider_id"):
-        row["printify_provider_id"] = str(hints.get("provider_id", ""))
+    resolved, blueprint_id, provider_id, matched_ids, missing_parts = _profile_resolution_details(profile, row)
+
+    row["printify_blueprint_id"] = str(blueprint_id) if blueprint_id > 0 else ""
+    row["printify_provider_id"] = str(provider_id) if provider_id > 0 else ""
+    row["profile_resolved"] = "YES" if resolved else "NO"
+    row["blueprint_id"] = str(blueprint_id) if blueprint_id > 0 else "0"
+    row["provider_id"] = str(provider_id) if provider_id > 0 else "0"
+    row["matched_variant_count"] = str(len(matched_ids))
     row["_placeholder_print_position"] = profile.get("placeholder_print_position", "front")
-    if row.get("product_family") == "tote":
-        unresolved = []
-        if not row.get("printify_blueprint_id"):
-            unresolved.append("blueprint")
-        if not row.get("printify_provider_id"):
-            unresolved.append("provider")
-        matched = ((profile.get("full_catalog_metadata") or {}).get("matched_variant_ids") or []) if isinstance(profile, dict) else []
-        if not matched:
-            unresolved.append("variants")
-        if unresolved:
-            row["launch_status"] = "BLOCKED_PROFILE"
-            row["error_stage"] = "PROFILE"
-            row["printify_publish_status"] = "BLOCKED_PROFILE"
-            row["shopify_sync_status"] = "BLOCKED_PROFILE"
-            row["error_message"] = f"Unresolved tote profile metadata: missing {', '.join(unresolved)}."
+
+    if not resolved:
+        row["launch_status"] = "BLOCKED_PROFILE"
+        row["status"] = "BLOCKED_PROFILE"
+        row["error_stage"] = "PROFILE"
+        row["printify_publish_status"] = "BLOCKED_PROFILE"
+        row["shopify_sync_status"] = "BLOCKED_PROFILE"
+        row["error_message"] = (
+            "Unresolved profile metadata: blueprint/provider/variant IDs missing. "
+            "Run Printify profile resolver."
+        )
+        row["last_publish_response"] = json.dumps({"missing": missing_parts}, ensure_ascii=False)
     return row
 
 
 def resolve_variants(row: dict[str, str], profile: dict[str, Any]) -> dict[str, str]:
     row["variant_strategy"] = row.get("variant_strategy") or "curated_launch"
-    if row.get("enabled_variant_ids_json") and row.get("enabled_variant_ids_json") != "[]":
+
+    if row.get("profile_resolved") == "NO":
+        row["enabled_variant_ids_json"] = "[]"
+        row["enabled_variant_count_before_filter"] = "0"
+        row["enabled_variant_count_after_filter"] = "0"
         return row
 
     meta = profile.get("full_catalog_metadata") if isinstance(profile, dict) else {}
     meta = meta if isinstance(meta, dict) else {}
     ids = meta.get("matched_variant_ids") or meta.get("printify_variant_ids") or []
-    parsed_ids = [int(v) for v in ids if str(v).strip().isdigit()]
+    parsed_ids = [_parse_positive_int(v) for v in ids]
+    parsed_ids = [v for v in parsed_ids if v > 0]
 
-    variant_records = meta.get("matched_variants") or meta.get("variants") or []
-    enabled_sizes = set(json.loads(row.get("enabled_sizes_json") or "[]"))
-    enabled_colors = set(json.loads(row.get("enabled_colors_json") or "[]"))
+    enabled_sizes = {str(v) for v in json.loads(row.get("enabled_sizes_json") or "[]") if str(v).strip()}
+    enabled_colors = {str(v) for v in json.loads(row.get("enabled_colors_json") or "[]") if str(v).strip()}
     in_stock_only = (row.get("in_stock_only") or "").upper() == "YES"
 
-    if variant_records and parsed_ids:
+    row["enabled_variant_count_before_filter"] = str(len(parsed_ids))
+
+    variant_records = meta.get("matched_variants") or meta.get("variants") or []
+    filtered_ids = list(parsed_ids)
+    if isinstance(variant_records, list) and variant_records and parsed_ids:
         filtered: list[int] = []
         for item in variant_records:
             if not isinstance(item, dict):
                 continue
-            vid = item.get("id")
-            if not isinstance(vid, int) or vid not in parsed_ids:
+            vid = _parse_positive_int(item.get("id"))
+            if vid <= 0 or vid not in parsed_ids:
                 continue
             options = item.get("options") if isinstance(item.get("options"), dict) else {}
-            size_ok = not enabled_sizes or options.get("size") in enabled_sizes
-            color_ok = not enabled_colors or options.get("color") in enabled_colors
+            size_ok = not enabled_sizes or str(options.get("size", "")) in enabled_sizes
+            color_ok = not enabled_colors or str(options.get("color", "")) in enabled_colors
             stock_ok = True if not in_stock_only else bool(item.get("is_available", item.get("is_enabled", True)))
             if size_ok and color_ok and stock_ok:
                 filtered.append(vid)
-        if filtered:
-            parsed_ids = filtered
+        filtered_ids = filtered
 
-    row["enabled_variant_ids_json"] = json.dumps(parsed_ids)
-    if not parsed_ids:
+    row["enabled_variant_ids_json"] = json.dumps(filtered_ids)
+    row["enabled_variant_count_after_filter"] = str(len(filtered_ids))
+
+    if not filtered_ids:
         row["error_stage"] = "PUBLISH"
-        row["error_message"] = "No Printify variant IDs resolved from profile metadata using active size/color/stock rules."
+        row["error_message"] = (
+            "Resolved profile variant IDs found, but active size/color/stock rules reduced usable variants to zero."
+        )
     return row
 
 
@@ -216,13 +255,13 @@ def recheck_sync_for_row(row: dict[str, str]) -> dict[str, str]:
     return row
 
 def publish_listing(row: dict[str, str], *, dry_run: bool = False, debug: bool = False) -> dict[str, str]:
-    if row.get("launch_status") == "BLOCKED_PROFILE" or row.get("product_family") == "tote":
-        row["error_stage"] = row.get("error_stage") or "PROFILE"
+    if row.get("profile_resolved") == "NO" or row.get("launch_status") == "BLOCKED_PROFILE":
+        row["error_stage"] = "PROFILE"
         row["launch_status"] = "BLOCKED_PROFILE"
         row["status"] = "BLOCKED_PROFILE"
-        row["error_message"] = row.get("error_message") or "Tote publishing blocked: unresolved blueprint/provider/variant profile metadata."
+        row["error_message"] = row.get("error_message") or "Unresolved profile metadata: blueprint/provider/variant IDs missing. Run Printify profile resolver."
         row["printify_publish_status"] = "BLOCKED_PROFILE"
-        row["shopify_sync_status"] = "NOT_ATTEMPTED"
+        row["shopify_sync_status"] = "BLOCKED_PROFILE"
         return row
 
     payload = build_printify_payload(row)

@@ -10,7 +10,8 @@ QUEUE_PATH = Path("queue.csv")
 
 NEW_SCHEMA = [
     "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","template_family","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","buyer_personalization_schema_json","internal_workflow_metadata_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup","printify_publish_status","shopify_sync_status","launch_status","last_publish_response","last_sync_check_at","publish_log_history_json",
-    "preview_style","preview_artifacts_json","manual_setup_packet_path","manual_setup_packet_json","manual_setup_status","featured_flag","merchandising_priority"
+    "preview_style","preview_artifacts_json","manual_setup_packet_path","manual_setup_packet_json","manual_setup_status","featured_flag","merchandising_priority",
+    "profile_resolved","blueprint_id","provider_id","matched_variant_count","enabled_variant_count_before_filter","enabled_variant_count_after_filter"
 ]
 
 
@@ -155,6 +156,8 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
         "manual_setup_required": r.get("needs_manual_personalization_setup", "NO"),
         "printify_product_id": r["printify_product_id"], "shopify_product_id": r["shopify_product_id"],
         "error_stage": r.get("error_stage", ""), "error_message": r.get("error_message", ""), "last_publish_response": r.get("last_publish_response", ""),
+        "profile_resolved": r.get("profile_resolved", ""), "blueprint_id": r.get("blueprint_id", r.get("printify_blueprint_id", "")), "provider_id": r.get("provider_id", r.get("printify_provider_id", "")),
+        "matched_variant_count": r.get("matched_variant_count", "0"), "enabled_variant_count_before_filter": r.get("enabled_variant_count_before_filter", "0"), "enabled_variant_count_after_filter": r.get("enabled_variant_count_after_filter", "0"),
     } for r in rows]
     Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
@@ -162,7 +165,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants", "error_stage", "error_message", "last_publish_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "last_publish_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
