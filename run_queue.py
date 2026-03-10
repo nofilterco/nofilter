@@ -14,6 +14,7 @@ from catalog_config import catalog_indexes, load_catalog
 from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, load_rows, next_id, save_rows
 from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants
 from setup_packet import generate_setup_packet
+from status_model import derive_launch_status, normalize_publish_status, normalize_sync_status
 
 REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "BLOCKED_PROFILE", "PUBLISHED_TO_PRINTIFY", "SYNC_PENDING", "SYNCED_TO_SHOPIFY", "MANUAL_PERSONALIZATION_REQUIRED", "PUBLISH_FAILED", "SYNC_FAILED"]
 
@@ -43,6 +44,30 @@ def _apply_merch(row: dict[str, Any], coll: dict[str, Any]) -> None:
     featured = set(coll.get("featured_listing_slugs", []))
     row["featured_flag"] = "YES" if row.get("listing_slug") in featured else "NO"
     row["merchandising_priority"] = str(coll.get("sort_priority", 100))
+
+
+
+def _normalize_row_statuses(row: dict[str, Any]) -> None:
+    publish_status = normalize_publish_status(row.get("printify_publish_status", ""))
+    sync_status = normalize_sync_status(row.get("shopify_sync_status", ""))
+    blocked = row.get("launch_status") == "BLOCKED_PROFILE" or row.get("status") == "BLOCKED_PROFILE" or publish_status == "BLOCKED_PROFILE"
+    if publish_status != "PUBLISHED_TO_PRINTIFY":
+        if sync_status in {"SYNC_PENDING", "SYNC_FAILED", "SYNCED_TO_SHOPIFY"}:
+            sync_status = "NOT_ATTEMPTED"
+    if blocked:
+        publish_status = "BLOCKED_PROFILE"
+        sync_status = "BLOCKED_PROFILE"
+        row["status"] = "BLOCKED_PROFILE"
+    row["printify_publish_status"] = publish_status
+    row["shopify_sync_status"] = sync_status
+    row["launch_status"] = derive_launch_status(
+        blocked=blocked,
+        publish_status=publish_status,
+        sync_status=sync_status,
+        needs_manual_setup=row.get("needs_manual_personalization_setup") == "YES",
+    )
+    if row["launch_status"] in {"SYNCED_TO_SHOPIFY", "SYNC_PENDING", "SYNC_FAILED", "PUBLISHED_TO_PRINTIFY", "BLOCKED_PROFILE"}:
+        row["status"] = row["launch_status"]
 
 
 def seed_listings(from_launch_plan: bool = True, collection: str = "", family: str = "") -> int:
@@ -90,13 +115,15 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", coll.get("default_visible_colors", [])))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
             "variant_strategy": "curated_launch", "show_all_variants": "NO", "in_stock_only": "YES" if pf in {"tee", "hoodie", "crewneck", "mug"} else "NO",
-            "printify_publish_status": "not_attempted", "shopify_sync_status": "SYNC_PENDING", "launch_status": "MANUAL_PERSONALIZATION_REQUIRED",
+            "printify_publish_status": "NOT_ATTEMPTED", "shopify_sync_status": "NOT_ATTEMPTED", "launch_status": "NOT_ATTEMPTED",
             "publish_log_history_json": json.dumps([{"ts": now_iso(), "event": "SEEDED", "detail": slug}]), "debug_trace": f"{now_iso()}:seeded",
         })
         _apply_merch(row, coll)
         resolve_profile(row, profile)
         if row.get("launch_status") == "BLOCKED_PROFILE":
             row["status"] = "BLOCKED_PROFILE"
+            row["printify_publish_status"] = "BLOCKED_PROFILE"
+            row["shopify_sync_status"] = "BLOCKED_PROFILE"
         out.append(row)
     append_rows(out)
     return len(out)
@@ -118,6 +145,8 @@ def build_assets_for_rows(limit: int = 0) -> int:
         _append_publish_log(row, "PREVIEW_SET", row["preview_style"])
         done += 1
         if limit and done >= limit: break
+    for row in rows:
+        _normalize_row_statuses(row)
     save_rows(rows); return done
 
 
@@ -139,6 +168,13 @@ def generate_setup_packets(ids: list[str] | None = None) -> int:
             continue
         if row.get("needs_manual_personalization_setup") != "YES" and row.get("publish_mode") not in {"personalized", "both"}:
             continue
+        if row.get("launch_status") == "BLOCKED_PROFILE" or row.get("status") == "BLOCKED_PROFILE":
+            row["needs_manual_personalization_setup"] = "NO"
+            row["manual_setup_status"] = "deferred_blocked_profile"
+            row["manual_setup_packet_path"] = ""
+            row["manual_setup_packet_json"] = ""
+            _append_publish_log(row, "SETUP_PACKET_DEFERRED", "blocked profile")
+            continue
         row["needs_manual_personalization_setup"] = "YES"
         packet = generate_setup_packet(row)
         row["manual_setup_packet_path"] = packet["path"]
@@ -148,6 +184,8 @@ def generate_setup_packets(ids: list[str] | None = None) -> int:
             row["launch_status"] = "MANUAL_PERSONALIZATION_REQUIRED"
         _append_publish_log(row, "SETUP_PACKET_GENERATED", packet["path"])
         done += 1
+    for row in rows:
+        _normalize_row_statuses(row)
     save_rows(rows); return done
 
 
@@ -161,7 +199,7 @@ def recheck_sync(ids: list[str] | None = None) -> int:
             _append_publish_log(row, "SYNC_RECHECK_SKIPPED", "blocked profile")
             checked += 1
             continue
-        if row.get("printify_publish_status") not in {"published", "created"}:
+        if normalize_publish_status(row.get("printify_publish_status", "")) != "PUBLISHED_TO_PRINTIFY":
             _append_publish_log(row, "SYNC_RECHECK_SKIPPED", "not published to printify")
             checked += 1
             continue
@@ -176,6 +214,8 @@ def recheck_sync(ids: list[str] | None = None) -> int:
             if row.get("status") == "PUBLISHED_TO_PRINTIFY":
                 row["status"] = "SYNC_PENDING"
         _append_publish_log(row, "SYNC_RECHECK", row.get("shopify_sync_status", "")); checked += 1
+    for row in rows:
+        _normalize_row_statuses(row)
     save_rows(rows); return checked
 
 
@@ -199,8 +239,8 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
             publish_listing(row, dry_run=dry_run)
             if dry_run:
                 row["pipeline_stage"] = "PUBLISH_DRY_RUN"
-            elif row.get("printify_publish_status") == "published":
-                row["published_at"] = now_iso(); row["pipeline_stage"] = "PUBLISHED"; row["status"] = "PUBLISHED_TO_PRINTIFY"; row["launch_status"] = "PUBLISHED_TO_PRINTIFY"
+            elif normalize_publish_status(row.get("printify_publish_status", "")) == "PUBLISHED_TO_PRINTIFY":
+                row["published_at"] = now_iso(); row["pipeline_stage"] = "PUBLISHED"; row["status"] = "PUBLISHED_TO_PRINTIFY"; row["launch_status"] = "PUBLISHED_TO_PRINTIFY"; row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
                 if row.get("shopify_sync_status") == "SYNCED_TO_SHOPIFY": row["status"] = "SYNCED_TO_SHOPIFY"; row["launch_status"] = "SYNCED_TO_SHOPIFY"
                 elif row.get("shopify_sync_status") == "SYNC_PENDING": row["launch_status"] = "SYNC_PENDING"
                 elif row.get("shopify_sync_status") == "SYNC_FAILED": row["launch_status"] = "SYNC_FAILED"; row["status"] = "SYNC_FAILED"
@@ -213,6 +253,8 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
         _append_publish_log(row, "PUBLISH_ATTEMPT", row.get("printify_publish_status", ""))
         count += 1
         if limit and count >= limit: break
+    for row in rows:
+        _normalize_row_statuses(row)
     save_rows(rows); return count
 
 

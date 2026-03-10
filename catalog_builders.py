@@ -14,7 +14,7 @@ ROLE_PHRASES = {
 
 INTERNAL_FIELD_KEYS = {
     "person_name", "role", "event_year", "destination", "wedding_city", "last_name", "wedding_date",
-    "family_name", "reunion_year", "reunion_city", "child_name", "established_year", "couple_names",
+    "family_name", "reunion_year", "reunion_city", "reunion_location", "child_name", "established_year", "couple_names",
 }
 
 
@@ -65,6 +65,16 @@ def build_title(listing: dict[str, Any], template: dict[str, Any] | None = None)
     return " - ".join(parts + [f"Custom {hook}"])[:140]
 
 
+def _dedupe_words(value: str) -> str:
+    out: list[str] = []
+    for token in value.split():
+        key = token.lower()
+        if out and out[-1].lower() == key:
+            continue
+        out.append(token)
+    return " ".join(out)
+
+
 def build_seo_title(listing: dict[str, Any], template: dict[str, Any] | None = None) -> str:
     template = template or {}
     if listing.get("seo_title"):
@@ -78,7 +88,7 @@ def build_seo_title(listing: dict[str, Any], template: dict[str, Any] | None = N
         intent = "Matching Family Gift"
     if role in {"Bride Crew", "Groom Crew", "Bachelorette Weekend"}:
         intent = "Wedding Weekend Gift"
-    core = " ".join([p for p in [occasion, role, product] if p])
+    core = _dedupe_words(" ".join([p for p in [occasion, role, product] if p]))
     return f"{core} - Personalized with {hook} | {intent} | Crafted Occasion"[:140]
 
 
