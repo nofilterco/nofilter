@@ -20,7 +20,8 @@ NEW_SCHEMA = [
     "variant_visibility_mode","shipping_mode","shipping_profile_strategy","shipping_profile_name","sync_detail_defaults_json","collections_sync_mode",
     "variant_visibility_recommended","shipping_profile_recommended","shipping_mode_recommended","sync_details_recommended","collections_recommended",
     "should_enable_personalization","personalization_toggle_manual_required","personalize_button_theme_block_required","requires_new_listing_for_personalization_if_already_published",
-    "publish_retry_eligible","publish_attempt_count"
+    "publish_retry_eligible","publish_attempt_count",
+    "ui_automation_status","ui_automation_last_run_at","ui_automation_last_result","ui_automation_screenshot_paths"
 ]
 
 
@@ -64,6 +65,10 @@ def migrate_if_needed() -> None:
         n["customer_editable_summary"] = row.get("customer_editable_summary") or ""
         n["publish_retry_eligible"] = row.get("publish_retry_eligible") or "NO"
         n["publish_attempt_count"] = row.get("publish_attempt_count") or "0"
+        n["ui_automation_status"] = row.get("ui_automation_status") or "not_run"
+        n["ui_automation_last_run_at"] = row.get("ui_automation_last_run_at") or ""
+        n["ui_automation_last_result"] = row.get("ui_automation_last_result") or ""
+        n["ui_automation_screenshot_paths"] = row.get("ui_automation_screenshot_paths") or "[]"
         n["variant_visibility_mode"] = row.get("variant_visibility_mode") or ("in_stock_only" if (n.get("in_stock_only") == "YES") else "show_all_variants")
         n["shipping_mode"] = row.get("shipping_mode") or "standard_only"
         n["shipping_profile_strategy"] = row.get("shipping_profile_strategy") or "use_store_default"

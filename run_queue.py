@@ -15,6 +15,7 @@ from catalog_config import catalog_indexes, load_catalog
 from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, dump_storefront_personalization_checklist_csv, load_rows, next_id, save_rows
 from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants, validate_printify_shop_access
 from setup_packet import generate_setup_packet
+from printify_ui_automation import run_ui_automation
 from status_model import derive_launch_status, normalize_publish_status, normalize_sync_status
 
 REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "BLOCKED_PROFILE", "PUBLISHED_TO_PRINTIFY", "SYNC_PENDING", "SYNCED_TO_SHOPIFY", "MANUAL_PERSONALIZATION_REQUIRED", "PUBLISH_FAILED", "SYNC_FAILED"]
@@ -426,7 +427,19 @@ def main() -> None:
     p.add_argument("--dry-run", action="store_true"); p.add_argument("--debug-payload-title", default="")
     p.add_argument("--publish-slug", default="", help="Publish only one approved listing slug")
     p.add_argument("--publish-debug", action="store_true", help="Verbose publish diagnostics")
-    p.add_argument("--export-report", action="store_true"); args = p.parse_args()
+    p.add_argument("--export-report", action="store_true")
+    p.add_argument("--ui-automation", action="store_true")
+    p.add_argument("--ui-listing-slug", action="append", default=[])
+    p.add_argument("--ui-row-id", action="append", default=[])
+    p.add_argument("--ui-manual-required-synced-only", action="store_true")
+    p.add_argument("--ui-screenshot-only", action="store_true")
+    p.add_argument("--ui-plan-only", action="store_true")
+    p.add_argument("--ui-headless", action="store_true")
+    p.add_argument("--ui-confirm-each", action="store_true")
+    p.add_argument("--ui-storage-state", default="")
+    p.add_argument("--ui-timeout-ms", type=int, default=15000)
+    p.add_argument("--ui-limit", type=int, default=0)
+    args = p.parse_args()
     if args.seed_launch: print(f"seeded={seed_listings(True, args.collection, args.family)}")
     if args.build_assets: print(f"assets={build_assets_for_rows()}")
     if args.approve_all: print(f"approved={mark_review('APPROVED')}")
@@ -437,6 +450,22 @@ def main() -> None:
     if args.setup_packets: print(f"setup_packets={generate_setup_packets()}")
     if args.export_manual_setup_only: print(f"manual_setup_export={dump_manual_setup_only_csv()}")
     if args.export_report: print(f"report={dump_launch_report()} ops_csv={dump_ops_review_csv()} checklist_csv={dump_storefront_personalization_checklist_csv()}")
+    if args.ui_automation:
+        result = run_ui_automation(argparse.Namespace(
+            listing_slug=args.ui_listing_slug,
+            row_id=args.ui_row_id,
+            manual_required_synced_only=args.ui_manual_required_synced_only,
+            checklist_csv="shopify_personalization_setup_checklist.csv",
+            dry_run=args.dry_run,
+            screenshot_only=args.ui_screenshot_only,
+            plan_only=args.ui_plan_only,
+            headless=args.ui_headless,
+            confirm_each=args.ui_confirm_each,
+            storage_state=args.ui_storage_state,
+            timeout_ms=args.ui_timeout_ms,
+            limit=args.ui_limit,
+        ))
+        print(f"ui_automation={json.dumps(result)}")
 
 
 if __name__ == "__main__":

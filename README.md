@@ -36,3 +36,14 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 ## Publish notes
 - Tee / hoodie / mug flows are active and remain default publish path.
 - Tote publishing remains blocked for any legacy tote rows until profile mapping is finalized with blueprint/provider/variant IDs.
+
+## Printify UI automation (Phase 8)
+- Use `python run_queue.py --ui-automation --ui-listing-slug <slug> --dry-run --ui-screenshot-only --ui-headless` for a safe selector/screenshot pass on one listing.
+- Or target a row: `python run_queue.py --ui-automation --ui-row-id <id> --dry-run --ui-headless`.
+- Or scope to operational queue rows only: `python run_queue.py --ui-automation --ui-manual-required-synced-only --dry-run --ui-headless`.
+- Live mode for a single product: remove `--dry-run` and `--ui-screenshot-only`.
+- Artifacts are written to `out/printify_ui_automation/`:
+  - run report JSON/CSV
+  - before/after screenshots
+  - one-time `shopify_theme_personalize_button_checklist.md` reminder for the Printify Personalize Button app block in Shopify theme editor.
+- Safety controls: explicit targeting required, selector probes fail-fast, optional non-headless `--ui-confirm-each` pause before publish click.
