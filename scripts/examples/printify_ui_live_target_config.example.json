@@ -1,0 +1,14 @@
+{
+  "listing_slug": ["cousin-crew-reunion-hoodie"],
+  "row_id": [],
+  "manual_required_synced_only": false,
+  "checklist_csv": "shopify_personalization_setup_checklist.csv",
+  "dry_run": false,
+  "screenshot_only": false,
+  "plan_only": false,
+  "headless": false,
+  "confirm_each": true,
+  "storage_state": "secrets/printify_storage_state.json",
+  "timeout_ms": 20000,
+  "limit": 1
+}

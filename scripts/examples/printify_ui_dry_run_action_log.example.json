@@ -1,0 +1,57 @@
+{
+  "id": "14",
+  "listing_slug": "family-reunion-personalized-tee",
+  "printify_product_id": "66f0a1example",
+  "mode": "dry_run_screenshot_only",
+  "started_at": "2026-03-10T05:20:01Z",
+  "finished_at": "2026-03-10T05:20:39Z",
+  "ui_automation_status": "completed",
+  "ui_automation_last_result": "dry_run_complete",
+  "ui_automation_screenshot_paths": [
+    "out/printify_ui_automation/screenshots/20260310T052001Z_family-reunion-personalized-tee_before.png",
+    "out/printify_ui_automation/screenshots/20260310T052001Z_family-reunion-personalized-tee_after.png"
+  ],
+  "action_log": [
+    {
+      "ts": "2026-03-10T05:20:01Z",
+      "step": "target_loaded",
+      "detail": {
+        "url": "https://printify.com/app/products/66f0a1example",
+        "mode": "dry_run_screenshot_only"
+      }
+    },
+    {
+      "ts": "2026-03-10T05:20:14Z",
+      "step": "selector_probe",
+      "detail": {
+        "has_personalization_toggle": true,
+        "has_publish_area": true
+      }
+    },
+    {
+      "ts": "2026-03-10T05:20:20Z",
+      "step": "personalization_state",
+      "detail": {
+        "is_enabled": false
+      }
+    },
+    {
+      "ts": "2026-03-10T05:20:28Z",
+      "step": "sync_detail_probe",
+      "detail": {
+        "detail": "product_title",
+        "label": "Product title",
+        "found": true
+      }
+    },
+    {
+      "ts": "2026-03-10T05:20:31Z",
+      "step": "sync_detail_probe",
+      "detail": {
+        "detail": "mockups",
+        "label": "Mockups",
+        "found": true
+      }
+    }
+  ]
+}
