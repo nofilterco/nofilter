@@ -1,0 +1,56 @@
+{
+  "hoodie_preview_row": {
+    "listing_slug": "mama-est-personalized-hoodie",
+    "product_family": "hoodie",
+    "preview_style": "script_nameplate",
+    "style_variant": "soft_script",
+    "preview_artifact_paths": {
+      "preview_style": "script_nameplate",
+      "style_variant": "soft_script",
+      "primary_preview": "out/placeholder_mama-est-personalized-hoodie_primary.png",
+      "alternate_preview": "",
+      "garment_preview_dark": "out/placeholder_mama-est-personalized-hoodie_dark.png",
+      "garment_preview_light": "out/placeholder_mama-est-personalized-hoodie_light.png",
+      "mug_wrap_preview": "",
+      "preferred_mode": "light",
+      "listing_specific": true
+    },
+    "customizable_badge_text": "Personalizable",
+    "personalization_cta": "Customize with your name",
+    "editable_fields_summary": "Established Year, Family Crest Logo",
+    "storefront_badges": "Custom Text, Logo Upload"
+  },
+  "setup_packet_storefront_copy_snippet": {
+    "headline": "Make it yours",
+    "subtext": "Add your name, date, photo, or logo before checkout",
+    "badges": [
+      "Custom Text",
+      "Logo Upload"
+    ],
+    "product_page_snippets": [
+      "Customize with your name",
+      "Add your monogram logo"
+    ]
+  },
+  "tee_preview_row": {
+    "listing_slug": "big-sister-era-personalized-youth-tee",
+    "product_family": "tee",
+    "preview_style": "script_nameplate",
+    "style_variant": "soft_script",
+    "preview_artifact_paths": {
+      "preview_style": "script_nameplate",
+      "style_variant": "soft_script",
+      "primary_preview": "out/placeholder_big-sister-era-personalized-youth-tee_primary.png",
+      "alternate_preview": "",
+      "garment_preview_dark": "out/placeholder_big-sister-era-personalized-youth-tee_dark.png",
+      "garment_preview_light": "out/placeholder_big-sister-era-personalized-youth-tee_light.png",
+      "mug_wrap_preview": "",
+      "preferred_mode": "light",
+      "listing_specific": true
+    },
+    "customizable_badge_text": "Personalizable",
+    "personalization_cta": "Customize with your name",
+    "editable_fields_summary": "Name, Family Crest Logo",
+    "storefront_badges": "Custom Text, Logo Upload"
+  }
+}
