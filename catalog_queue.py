@@ -17,6 +17,9 @@ NEW_SCHEMA = [
     "customizable_badge_text","personalization_cta","editable_fields_summary","supports_photo_upload","supports_logo_upload","supports_text_edit",
     "storefront_personalization_headline","storefront_personalization_subtext","storefront_badges",
     "personalization_hub_ready","requires_shopify_republish_for_personalization","printify_personalize_button_required",
+    "variant_visibility_mode","shipping_mode","shipping_profile_strategy","shipping_profile_name","sync_detail_defaults_json","collections_sync_mode",
+    "variant_visibility_recommended","shipping_profile_recommended","shipping_mode_recommended","sync_details_recommended","collections_recommended",
+    "should_enable_personalization","personalization_toggle_manual_required","personalize_button_theme_block_required","requires_new_listing_for_personalization_if_already_published",
     "publish_retry_eligible","publish_attempt_count"
 ]
 
@@ -61,6 +64,21 @@ def migrate_if_needed() -> None:
         n["customer_editable_summary"] = row.get("customer_editable_summary") or ""
         n["publish_retry_eligible"] = row.get("publish_retry_eligible") or "NO"
         n["publish_attempt_count"] = row.get("publish_attempt_count") or "0"
+        n["variant_visibility_mode"] = row.get("variant_visibility_mode") or ("in_stock_only" if (n.get("in_stock_only") == "YES") else "show_all_variants")
+        n["shipping_mode"] = row.get("shipping_mode") or "standard_only"
+        n["shipping_profile_strategy"] = row.get("shipping_profile_strategy") or "use_store_default"
+        n["shipping_profile_name"] = row.get("shipping_profile_name") or ""
+        n["sync_detail_defaults_json"] = row.get("sync_detail_defaults_json") or "[\"product_title\", \"description\", \"mockups\", \"colors_sizes_prices_skus\", \"tags\", \"shipping_profile\"]"
+        n["collections_sync_mode"] = row.get("collections_sync_mode") or "apply_launch_collections"
+        n["variant_visibility_recommended"] = row.get("variant_visibility_recommended") or n["variant_visibility_mode"]
+        n["shipping_profile_recommended"] = row.get("shipping_profile_recommended") or n["shipping_profile_strategy"]
+        n["shipping_mode_recommended"] = row.get("shipping_mode_recommended") or n["shipping_mode"]
+        n["sync_details_recommended"] = row.get("sync_details_recommended") or n["sync_detail_defaults_json"]
+        n["collections_recommended"] = row.get("collections_recommended") or (row.get("shopify_sales_channel_collections") or row.get("collection_title") or "")
+        n["should_enable_personalization"] = row.get("should_enable_personalization") or ("YES" if (row.get("publish_mode") in {"personalized", "both"}) else "NO")
+        n["personalization_toggle_manual_required"] = row.get("personalization_toggle_manual_required") or n.get("needs_manual_personalization_setup") or "NO"
+        n["personalize_button_theme_block_required"] = row.get("personalize_button_theme_block_required") or n.get("printify_personalize_button_required") or "NO"
+        n["requires_new_listing_for_personalization_if_already_published"] = row.get("requires_new_listing_for_personalization_if_already_published") or n.get("requires_shopify_republish_for_personalization") or "NO"
         migrated.append(n)
     _write(migrated)
 
@@ -127,6 +145,30 @@ def _derive_storefront_personalization(row: dict[str, str]) -> dict[str, str]:
         "printify_personalize_button_required": row.get("printify_personalize_button_required") or personalize_button_required,
     }
 
+
+
+def _derive_publish_defaults(row: dict[str, str]) -> dict[str, str]:
+    sync_defaults = row.get("sync_detail_defaults_json") or ""
+    if not sync_defaults or sync_defaults == "[]":
+        sync_defaults = '["product_title", "description", "mockups", "colors_sizes_prices_skus", "tags", "shipping_profile"]'
+    collections = row.get("shopify_sales_channel_collections") or row.get("collection_title") or ""
+    return {
+        "variant_visibility_mode": row.get("variant_visibility_mode") or ("in_stock_only" if (row.get("in_stock_only") == "YES") else "show_all_variants"),
+        "shipping_mode": row.get("shipping_mode") or "standard_only",
+        "shipping_profile_strategy": row.get("shipping_profile_strategy") or "use_store_default",
+        "shipping_profile_name": row.get("shipping_profile_name") or "",
+        "sync_detail_defaults_json": sync_defaults,
+        "collections_sync_mode": row.get("collections_sync_mode") or "apply_launch_collections",
+        "variant_visibility_recommended": row.get("variant_visibility_recommended") or (row.get("variant_visibility_mode") or ("in_stock_only" if (row.get("in_stock_only") == "YES") else "show_all_variants")),
+        "shipping_profile_recommended": row.get("shipping_profile_recommended") or (row.get("shipping_profile_strategy") or "use_store_default"),
+        "shipping_mode_recommended": row.get("shipping_mode_recommended") or (row.get("shipping_mode") or "standard_only"),
+        "sync_details_recommended": row.get("sync_details_recommended") or sync_defaults,
+        "collections_recommended": row.get("collections_recommended") or collections,
+        "should_enable_personalization": row.get("should_enable_personalization") or ("YES" if (row.get("publish_mode") in {"personalized", "both"}) else "NO"),
+        "personalization_toggle_manual_required": row.get("personalization_toggle_manual_required") or row.get("needs_manual_personalization_setup", "NO"),
+        "personalize_button_theme_block_required": row.get("personalize_button_theme_block_required") or row.get("printify_personalize_button_required", "NO"),
+        "requires_new_listing_for_personalization_if_already_published": row.get("requires_new_listing_for_personalization_if_already_published") or row.get("requires_shopify_republish_for_personalization", "NO"),
+    }
 
 def load_rows() -> list[dict[str, str]]:
     migrate_if_needed()
@@ -221,6 +263,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
         "shopify_sync_status": r.get("shopify_sync_status", ""),
         "manual_setup_required": r.get("needs_manual_personalization_setup", "NO"),
         **_derive_storefront_personalization(r),
+        **_derive_publish_defaults(r),
         "publish_retry_eligible": r.get("publish_retry_eligible", ""),
         "publish_attempt_count": r.get("publish_attempt_count", ""),
         "printify_product_id": r["printify_product_id"], "shopify_product_id": r["shopify_product_id"],
@@ -236,7 +279,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required", "variant_visibility_recommended", "shipping_profile_recommended", "shipping_mode_recommended", "sync_details_recommended", "collections_recommended", "should_enable_personalization", "personalization_toggle_manual_required", "personalize_button_theme_block_required", "requires_new_listing_for_personalization_if_already_published", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -248,6 +291,7 @@ def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_in
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
             enriched["stock_mode"] = "in_stock_only" if (r.get("in_stock_only") == "YES") else "all_variants"
             enriched.update(_derive_storefront_personalization(r))
+            enriched.update(_derive_publish_defaults(r))
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
 
@@ -265,6 +309,7 @@ def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
             enriched["storefront_preview_style"] = r.get("preview_style", "")
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
             enriched.update(_derive_storefront_personalization(r))
+            enriched.update(_derive_publish_defaults(r))
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
 
@@ -275,6 +320,8 @@ def dump_storefront_personalization_checklist_csv(path: str = "shopify_personali
         "id", "title", "listing_slug", "shopify_product_id", "printify_product_id", "template_family", "style_variant",
         "customer_editable_summary", "editable_fields_summary", "supports_text_edit", "supports_photo_upload", "supports_logo_upload",
         "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required",
+        "variant_visibility_recommended", "shipping_profile_recommended", "shipping_mode_recommended", "sync_details_recommended", "collections_recommended",
+        "should_enable_personalization", "personalization_toggle_manual_required", "personalize_button_theme_block_required", "requires_new_listing_for_personalization_if_already_published",
         "manual_setup_status", "manual_setup_packet_path", "storefront_personalization_headline", "storefront_personalization_subtext",
         "storefront_badges", "preview_artifacts_json", "storefront_setup_reminder",
     ]
@@ -286,6 +333,7 @@ def dump_storefront_personalization_checklist_csv(path: str = "shopify_personali
             enriched = dict(r)
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
             enriched.update(_derive_storefront_personalization(r))
+            enriched.update(_derive_publish_defaults(r))
             enriched["storefront_setup_reminder"] = reminder
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path

@@ -1,0 +1,19 @@
+publish_defaults:
+  global:
+    variant_visibility_mode: in_stock_only
+    shipping_mode: standard_only
+    shipping_profile_strategy: use_store_default
+    sync_detail_defaults:
+      - product_title
+      - description
+      - mockups
+      - colors_sizes_prices_skus
+      - tags
+      - shipping_profile
+    collections_sync_mode: apply_launch_collections
+  store_overrides:
+    Crafted Occasion:
+      shipping_mode: standard_only
+  product_family_overrides:
+    tote:
+      variant_visibility_mode: show_all_variants

@@ -95,8 +95,11 @@ def upload_image(file_name: str, *, url: str = "", local_path: str = "") -> dict
     raise ValueError("upload_image requires either url or local_path")
 
 
-def publish_product(shop_id: str, product_id: str) -> dict[str, Any]:
-    return _post(f"/shops/{shop_id}/products/{product_id}/publish.json", {"title": True, "description": True, "images": True, "variants": True, "tags": True})
+def publish_product(shop_id: str, product_id: str, sync_details: dict[str, bool] | None = None) -> dict[str, Any]:
+    payload = {"title": True, "description": True, "images": True, "variants": True, "tags": True}
+    if isinstance(sync_details, dict):
+        payload.update(sync_details)
+    return _post(f"/shops/{shop_id}/products/{product_id}/publish.json", payload)
 
 
 def get_product(shop_id: str, product_id: str) -> dict[str, Any]:

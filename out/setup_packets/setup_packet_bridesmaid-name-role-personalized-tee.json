@@ -1,8 +1,23 @@
 {
-  "listing_id": "7",
+  "listing_id": "1",
   "listing_slug": "bridesmaid-name-role-personalized-tee",
   "listing_title": "Bridesmaid Name & Role Personalized T-Shirt",
-  "manual_setup_required": true,
+  "manual_setup_required": false,
+  "recommended_printify_personalization_toggle_state": "enabled",
+  "recommended_variant_visibility_setting": "in_stock_only",
+  "recommended_shipping_profile_action": "use_store_default",
+  "recommended_shipping_mode": "standard_only",
+  "recommended_sync_detail_selections": [
+    "product_title",
+    "description",
+    "mockups",
+    "colors_sizes_prices_skus",
+    "tags",
+    "shipping_profile"
+  ],
+  "recommended_shopify_collections": [
+    "Bridal Party"
+  ],
   "text_fields": [
     {
       "type": "text",
@@ -10,6 +25,7 @@
       "label": "Name",
       "required": true,
       "max_length": 18,
+      "upload_type": "",
       "helper_text": "Ava"
     },
     {
@@ -18,12 +34,107 @@
       "label": "Role",
       "required": true,
       "max_length": "",
+      "upload_type": "",
       "helper_text": "Bridesmaid"
     }
   ],
   "logo_fields": [],
   "image_fields": [],
   "recommended_preview_placeholder": "Ava\nBridesmaid",
-  "recommended_preview_artifact": "out/placeholder_bridesmaid-name-role-personalized-tee_primary.png",
-  "helper_text": "Manual Personalization Hub setup required after publishing."
+  "recommended_preview_artifact": "",
+  "helper_text": "Manual Personalization Hub setup required after publishing.",
+  "customer_can_edit_summary": "",
+  "personalization_hub_readiness": {
+    "personalization_hub_ready": "",
+    "requires_shopify_republish_for_personalization": "",
+    "printify_personalize_button_required": "",
+    "should_enable_personalization": "YES",
+    "personalization_toggle_manual_required": "YES",
+    "personalize_button_theme_block_required": "YES",
+    "requires_new_listing_for_personalization_if_already_published": "NO"
+  },
+  "operations_split": {
+    "automated_defaults_applied_in_queue": {
+      "variant_visibility": "in_stock_only",
+      "shipping_mode": "standard_only",
+      "shipping_profile": "use_store_default",
+      "sync_details": [
+        "product_title",
+        "description",
+        "mockups",
+        "colors_sizes_prices_skus",
+        "tags",
+        "shipping_profile"
+      ],
+      "shopify_collections": [
+        "Bridal Party"
+      ]
+    },
+    "manual_ui_actions_required": {
+      "enable_printify_personalization_toggle": "YES",
+      "verify_personalize_button_app_block_in_shopify_theme": "YES",
+      "create_new_listing_if_already_published_before_personalization": "NO"
+    }
+  },
+  "manual_setup_guide": {
+    "hub": "Printify Personalization Hub",
+    "field_definitions": {
+      "text": [
+        {
+          "type": "text",
+          "key": "person_name",
+          "label": "Name",
+          "required": true,
+          "max_length": 18,
+          "upload_type": "",
+          "helper_text": "Ava"
+        },
+        {
+          "type": "text",
+          "key": "role",
+          "label": "Role",
+          "required": true,
+          "max_length": "",
+          "upload_type": "",
+          "helper_text": "Bridesmaid"
+        }
+      ],
+      "image": [],
+      "logo": []
+    },
+    "required_vs_optional": [
+      {
+        "label": "Name",
+        "required": true
+      },
+      {
+        "label": "Role",
+        "required": true
+      }
+    ],
+    "text_limits": [
+      {
+        "label": "Name",
+        "max_length": 18
+      },
+      {
+        "label": "Role",
+        "max_length": ""
+      }
+    ],
+    "upload_field_types": [],
+    "buyer_helper_text_suggestions": [
+      "Ava",
+      "Bridesmaid"
+    ],
+    "storefront_copy_suggestions": {
+      "headline": "",
+      "subtext": "",
+      "badges": [],
+      "product_page_snippets": [
+        "Customize with your name"
+      ],
+      "shopify_app_block_reminder": "Add/verify the Printify Personalize Button app block on the Shopify product page template."
+    }
+  }
 }
