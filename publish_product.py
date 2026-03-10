@@ -214,29 +214,116 @@ def _set_publish_failure(row: dict[str, str], *, stage: str, message: str, respo
     row["launch_status"] = "PUBLISH_FAILED"
     row["last_publish_response"] = json.dumps(response or {"error": message}, ensure_ascii=False)[:5000]
 
+
+def _collect_error_strings(payload: Any, *, max_items: int = 8) -> list[str]:
+    found: list[str] = []
+
+    def walk(value: Any, path: str = "") -> None:
+        if len(found) >= max_items:
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                key_path = f"{path}.{key}" if path else str(key)
+                key_l = str(key).lower()
+                if key_l in {"error", "errors", "message", "reason", "detail"} and nested:
+                    text = str(nested).strip()
+                    if text:
+                        found.append(f"{key_path}: {text}")
+                elif any(token in key_l for token in ("error", "failed", "failure")) and nested:
+                    found.append(f"{key_path}: {nested}")
+                walk(nested, key_path)
+        elif isinstance(value, list):
+            for i, nested in enumerate(value):
+                walk(nested, f"{path}[{i}]")
+        elif path and isinstance(value, str):
+            lowered = value.lower()
+            if any(token in lowered for token in ("publishing error", "publish failed", "sync failed", "failed")):
+                found.append(f"{path}: {value}")
+
+    walk(payload)
+    return found[:max_items]
+
+
+def _extract_shopify_identity_from_printify_product(product: dict[str, Any]) -> tuple[str, str]:
+    external = product.get("external") if isinstance(product.get("external"), dict) else {}
+    sales_channel = product.get("sales_channel_properties") if isinstance(product.get("sales_channel_properties"), dict) else {}
+    external_sc = sales_channel.get("external") if isinstance(sales_channel.get("external"), dict) else {}
+
+    shopify_id = str(
+        external.get("id")
+        or sales_channel.get("product_id")
+        or external_sc.get("id")
+        or ""
+    ).strip()
+    handle = str(
+        external.get("handle")
+        or sales_channel.get("handle")
+        or external_sc.get("handle")
+        or ""
+    ).strip()
+    return shopify_id, handle
+
+
+def _summarize_sync_payload(product: dict[str, Any], error_details: list[str]) -> dict[str, Any]:
+    publish_details = product.get("publishing") if isinstance(product.get("publishing"), dict) else {}
+    sales_channel = product.get("sales_channel_properties") if isinstance(product.get("sales_channel_properties"), dict) else {}
+    return {
+        "id": product.get("id"),
+        "visible": product.get("visible"),
+        "is_locked": product.get("is_locked"),
+        "external": product.get("external") if isinstance(product.get("external"), dict) else {},
+        "sales_channel_properties": sales_channel,
+        "publishing": publish_details,
+        "error_details": error_details,
+    }
+
 def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
     row["last_sync_check_at"] = now_iso()
     if not row.get("printify_product_id"):
         row["shopify_sync_status"] = "NOT_ATTEMPTED"
         return
+
+    product: dict[str, Any] = {}
+    error_details: list[str] = []
     try:
         product = get_product(shop_id, row["printify_product_id"])
-        visible = bool(product.get("visible"))
-        row["shopify_sync_status"] = "SYNC_PENDING" if visible else "SYNC_PENDING"
-    except Exception:
+        error_details = _collect_error_strings(product)
+    except Exception as exc:
         row["shopify_sync_status"] = "NOT_ATTEMPTED"
+        row["last_sync_response"] = json.dumps({"error": f"Printify product lookup failed: {exc}"}, ensure_ascii=False)[:5000]
+        return
 
-    shopify_id = row.get("shopify_product_id") or ""
+    printify_shopify_id, printify_handle = _extract_shopify_identity_from_printify_product(product)
+    if printify_handle:
+        row["shopify_handle"] = printify_handle
+
+    shopify_id = row.get("shopify_product_id") or printify_shopify_id or ""
     if not shopify_id and row.get("shopify_handle"):
-        product = find_product_by_handle(row.get("shopify_handle", ""))
-        shopify_id = str(product.get("id", ""))
-        if product.get("handle"):
-            row["shopify_handle"] = str(product["handle"])
+        found = find_product_by_handle(row.get("shopify_handle", ""))
+        shopify_id = str(found.get("id", ""))
+        if found.get("handle"):
+            row["shopify_handle"] = str(found["handle"])
     if not shopify_id:
         shopify_id = find_product_id_by_title(row.get("title", ""))
     if shopify_id:
         row["shopify_product_id"] = shopify_id
         row["shopify_sync_status"] = "SYNCED_TO_SHOPIFY"
+        row["error_stage"] = "" if row.get("error_stage") == "SHOPIFY_SYNC" else row.get("error_stage", "")
+        row["error_message"] = "" if row.get("error_stage") == "SHOPIFY_SYNC" else row.get("error_message", "")
+        row["printify_publish_error"] = ""
+    elif error_details:
+        row["shopify_sync_status"] = "SYNC_FAILED"
+        row["error_stage"] = "SHOPIFY_SYNC"
+        row["error_message"] = "; ".join(error_details)[:1000]
+        row["printify_publish_error"] = row["error_message"]
+    else:
+        row["shopify_sync_status"] = "SYNC_PENDING"
+        if row.get("error_stage") == "SHOPIFY_SYNC":
+            row["error_stage"] = ""
+            row["error_message"] = ""
+            row["printify_publish_error"] = ""
+
+    row["last_sync_response"] = json.dumps(_summarize_sync_payload(product, error_details), ensure_ascii=False)[:5000]
 
 
 
