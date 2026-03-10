@@ -27,8 +27,8 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 - **publish**: `python run_queue.py --publish-approved`.
 - **recheck sync**: `python run_queue.py --recheck-sync`.
 - **manual personalization setup**: rows with `needs_manual_personalization_setup=YES` and `launch_status=MANUAL_PERSONALIZATION_REQUIRED` require Shopify personalization setup before launch.
-- **tote blocking behavior**: tote rows remain blocked in publisher until blueprint/provider/variant mapping is finalized.
+- **current launch scope**: bridal-party tees/hoodies and family-reunion tee/hoodie/mug are active; tote is excluded from seeding for now.
 
 ## Publish notes
 - Tee / hoodie / mug flows are active and remain default publish path.
-- Tote publishing is intentionally blocked until profile mapping is finalized with blueprint/provider/variant IDs.
+- Tote publishing remains blocked for any legacy tote rows until profile mapping is finalized with blueprint/provider/variant IDs.

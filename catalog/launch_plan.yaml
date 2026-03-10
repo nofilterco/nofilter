@@ -748,35 +748,3 @@ launch_listings:
   suggested_retail_price_cents: 1999
   publish_mode: personalized
   template_family: photo_keepsake
-- listing_slug: bridal-party-canvas-tote-bag
-  listing_template_id: wedding-text-only-template
-  product_profile_id: tote_liberty_canvas
-  collection_slug: bridal-party
-  exact_title: Bridal Party Canvas Tote Bag
-  exact_html_description: <p>Carry wedding-day essentials in a custom bridal party
-    canvas tote.</p>
-  exact_tags:
-  - crafted-occasion
-  - bridal-party
-  - tote
-  - collection-bridal-party
-  personalization_fields:
-  - field_key: role
-    field_label: Role
-    field_type: choice
-    required: true
-    placeholder: Bridesmaid
-  - field_key: person_name
-    field_label: Name
-    field_type: text
-    max_length: 18
-    required: true
-    placeholder: Mia
-  launch_visible_sizes:
-  - 15x16
-  launch_visible_colors:
-  - Natural
-  - Black
-  suggested_retail_price_cents: 2499
-  publish_mode: personalized
-  template_family: text_only
