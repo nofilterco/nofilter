@@ -51,12 +51,19 @@ def generate_setup_packet(row: dict[str, str]) -> dict[str, Any]:
     personalization_hub_ready = row.get("personalization_hub_ready", "NO")
     requires_republish = row.get("requires_shopify_republish_for_personalization", "NO")
     personalize_button_required = row.get("printify_personalize_button_required", "YES" if (has_text or has_image or has_logo) else "NO")
+    recommended_sync_details = [v.strip() for v in (row.get("sync_details_recommended") or "").split(",") if v.strip()]
 
     packet = {
         "listing_id": row.get("id", ""),
         "listing_slug": row.get("listing_slug", ""),
         "listing_title": row.get("title", ""),
         "manual_setup_required": row.get("needs_manual_personalization_setup", "NO") == "YES",
+        "recommended_printify_personalization_toggle_state": "enabled" if row.get("should_enable_personalization", "NO") == "YES" else "disabled",
+        "recommended_variant_visibility_setting": row.get("variant_visibility_recommended", row.get("variant_visibility_mode", "in_stock_only")),
+        "recommended_shipping_profile_action": row.get("shipping_profile_recommended", row.get("shipping_profile_strategy", "use_store_default")),
+        "recommended_shipping_mode": row.get("shipping_mode_recommended", row.get("shipping_mode", "standard_only")),
+        "recommended_sync_detail_selections": recommended_sync_details,
+        "recommended_shopify_collections": [v.strip() for v in (row.get("collections_recommended", "")).split(",") if v.strip()],
         "text_fields": text_packet,
         "logo_fields": logo_packet,
         "image_fields": image_packet,
@@ -68,6 +75,24 @@ def generate_setup_packet(row: dict[str, str]) -> dict[str, Any]:
             "personalization_hub_ready": personalization_hub_ready,
             "requires_shopify_republish_for_personalization": requires_republish,
             "printify_personalize_button_required": personalize_button_required,
+            "should_enable_personalization": row.get("should_enable_personalization", "NO"),
+            "personalization_toggle_manual_required": row.get("personalization_toggle_manual_required", "NO"),
+            "personalize_button_theme_block_required": row.get("personalize_button_theme_block_required", "NO"),
+            "requires_new_listing_for_personalization_if_already_published": row.get("requires_new_listing_for_personalization_if_already_published", "NO"),
+        },
+        "operations_split": {
+            "automated_defaults_applied_in_queue": {
+                "variant_visibility": row.get("variant_visibility_recommended", row.get("variant_visibility_mode", "in_stock_only")),
+                "shipping_mode": row.get("shipping_mode_recommended", row.get("shipping_mode", "standard_only")),
+                "shipping_profile": row.get("shipping_profile_recommended", row.get("shipping_profile_strategy", "use_store_default")),
+                "sync_details": recommended_sync_details,
+                "shopify_collections": [v.strip() for v in (row.get("collections_recommended", "")).split(",") if v.strip()],
+            },
+            "manual_ui_actions_required": {
+                "enable_printify_personalization_toggle": row.get("personalization_toggle_manual_required", "NO"),
+                "verify_personalize_button_app_block_in_shopify_theme": row.get("personalize_button_theme_block_required", "NO"),
+                "create_new_listing_if_already_published_before_personalization": row.get("requires_new_listing_for_personalization_if_already_published", "NO"),
+            },
         },
         "manual_setup_guide": {
             "hub": "Printify Personalization Hub",

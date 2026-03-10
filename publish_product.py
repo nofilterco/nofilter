@@ -183,6 +183,30 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
 
 
 
+
+
+def _publish_sync_details(row: dict[str, str]) -> dict[str, bool]:
+    defaults = [v.strip() for v in (row.get("sync_details_recommended") or "").split(",") if v.strip()]
+    mapping = {
+        "product_title": "title",
+        "description": "description",
+        "mockups": "images",
+        "colors_sizes_prices_skus": "variants",
+        "tags": "tags",
+        "shipping_profile": "key_features",
+    }
+    if not defaults:
+        defaults = ["product_title", "description", "mockups", "colors_sizes_prices_skus", "tags", "shipping_profile"]
+    selected = {mapping[k] for k in defaults if k in mapping}
+    return {
+        "title": "title" in selected,
+        "description": "description" in selected,
+        "images": "images" in selected,
+        "variants": "variants" in selected,
+        "tags": "tags" in selected,
+        "key_features": "key_features" in selected,
+    }
+
 def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
     variants = payload.get("variants") if isinstance(payload.get("variants"), list) else []
     area_count = len(payload.get("print_areas") or [])
@@ -257,7 +281,7 @@ def _publish_with_backoff(shop_id: str, product_id: str, row: dict[str, str], *,
     for attempt in range(1, max_attempts + 1):
         row["publish_attempt_count"] = str(attempt)
         try:
-            resp = printify_publish(shop_id, product_id)
+            resp = printify_publish(shop_id, product_id, _publish_sync_details(row))
             row["publish_retry_eligible"] = "NO"
             return resp
         except PrintifyAPIError as exc:

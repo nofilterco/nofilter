@@ -19,6 +19,7 @@ def load_catalog() -> dict[str, Any]:
         "product_profiles": _load_yaml(CATALOG_DIR / "product_profiles.yaml").get("product_profiles", []),
         "listing_templates": _load_yaml(CATALOG_DIR / "listing_templates.yaml").get("listing_templates", []),
         "launch_plan": _load_yaml(CATALOG_DIR / "launch_plan.yaml").get("launch_listings", []),
+        "publish_defaults": _load_yaml(CATALOG_DIR / "publish_defaults.yaml").get("publish_defaults", {}),
     }
 
 

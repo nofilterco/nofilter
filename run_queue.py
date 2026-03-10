@@ -20,6 +20,62 @@ from status_model import derive_launch_status, normalize_publish_status, normali
 REVIEW_FLOW = ["DRAFT", "READY_FOR_REVIEW", "APPROVED", "REJECTED", "BLOCKED_PROFILE", "PUBLISHED_TO_PRINTIFY", "SYNC_PENDING", "SYNCED_TO_SHOPIFY", "MANUAL_PERSONALIZATION_REQUIRED", "PUBLISH_FAILED", "SYNC_FAILED"]
 
 
+def _normalize_sync_details(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    return []
+
+
+def _resolve_publish_defaults(catalog: dict[str, Any], *, store_brand: str, product_family: str) -> dict[str, Any]:
+    defaults_root = catalog.get("publish_defaults") if isinstance(catalog.get("publish_defaults"), dict) else {}
+    global_defaults = defaults_root.get("global") if isinstance(defaults_root.get("global"), dict) else {}
+    store_overrides = defaults_root.get("store_overrides") if isinstance(defaults_root.get("store_overrides"), dict) else {}
+    family_overrides = defaults_root.get("product_family_overrides") if isinstance(defaults_root.get("product_family_overrides"), dict) else {}
+
+    resolved = dict(global_defaults)
+    if isinstance(store_overrides.get(store_brand), dict):
+        resolved.update(store_overrides.get(store_brand, {}))
+    if isinstance(family_overrides.get(product_family), dict):
+        resolved.update(family_overrides.get(product_family, {}))
+
+    sync_defaults = _normalize_sync_details(resolved.get("sync_detail_defaults"))
+    if not sync_defaults:
+        sync_defaults = ["product_title", "description", "mockups", "colors_sizes_prices_skus", "tags", "shipping_profile"]
+
+    resolved["variant_visibility_mode"] = resolved.get("variant_visibility_mode") or "in_stock_only"
+    resolved["shipping_mode"] = resolved.get("shipping_mode") or "standard_only"
+    resolved["shipping_profile_strategy"] = resolved.get("shipping_profile_strategy") or "use_store_default"
+    resolved["collections_sync_mode"] = resolved.get("collections_sync_mode") or "apply_launch_collections"
+    resolved["sync_detail_defaults"] = sync_defaults
+    return resolved
+
+
+def _apply_publish_defaults_to_row(row: dict[str, Any], defaults: dict[str, Any], coll: dict[str, Any]) -> None:
+    mode = defaults.get("variant_visibility_mode", "in_stock_only")
+    row["variant_visibility_mode"] = mode
+    row["show_all_variants"] = "YES" if mode == "show_all_variants" else "NO"
+    row["in_stock_only"] = "NO" if mode == "show_all_variants" else "YES"
+
+    row["shipping_mode"] = defaults.get("shipping_mode", "standard_only")
+    row["shipping_profile_strategy"] = defaults.get("shipping_profile_strategy", "use_store_default")
+    row["shipping_profile_name"] = defaults.get("shipping_profile_name", "")
+
+    sync_defaults = _normalize_sync_details(defaults.get("sync_detail_defaults"))
+    row["sync_detail_defaults_json"] = json.dumps(sync_defaults)
+    row["sync_details_recommended"] = ",".join(sync_defaults)
+
+    collections_mode = defaults.get("collections_sync_mode", "apply_launch_collections")
+    row["collections_sync_mode"] = collections_mode
+    collection_name = coll.get("shopify_collection_name", "") if collections_mode == "apply_launch_collections" else ""
+    row["shopify_sales_channel_collections"] = collection_name
+
+    row["variant_visibility_recommended"] = mode
+    row["shipping_profile_recommended"] = row["shipping_profile_strategy"] if not row.get("shipping_profile_name") else f"explicit_profile_name:{row['shipping_profile_name']}"
+    row["shipping_mode_recommended"] = row["shipping_mode"]
+    row["collections_recommended"] = collection_name
+
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -84,6 +140,10 @@ def _storefront_personalization_metadata(row: dict[str, Any], buyer_schema: dict
         "personalization_hub_ready": "YES" if (supports_any and is_synced and packet_generated and not manual_required) else "NO",
         "requires_shopify_republish_for_personalization": "YES" if (supports_any and is_synced and manual_required) else "NO",
         "printify_personalize_button_required": "YES" if supports_any else "NO",
+        "should_enable_personalization": "YES" if supports_any and row.get("publish_mode") in {"personalized", "both"} else "NO",
+        "personalization_toggle_manual_required": "YES" if supports_any else "NO",
+        "personalize_button_theme_block_required": "YES" if supports_any else "NO",
+        "requires_new_listing_for_personalization_if_already_published": "YES" if (supports_any and is_synced) else "NO",
     }
 
 
@@ -163,7 +223,7 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "enabled_sizes_json": json.dumps(item.get("launch_visible_sizes", profile.get("launch_visible_sizes", []))),
             "enabled_colors_json": json.dumps(item.get("launch_visible_colors", profile.get("launch_visible_colors", coll.get("default_visible_colors", [])))),
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
-            "variant_strategy": "curated_launch", "show_all_variants": "NO", "in_stock_only": "YES" if pf in {"tee", "hoodie", "crewneck", "mug"} else "NO",
+            "variant_strategy": "curated_launch", "show_all_variants": "NO", "in_stock_only": "YES",
             "printify_publish_status": "NOT_ATTEMPTED", "shopify_sync_status": "NOT_ATTEMPTED", "launch_status": "NOT_ATTEMPTED",
             "profile_resolved": "", "blueprint_id": "0", "provider_id": "0", "matched_variant_count": "0",
             "enabled_variant_count_before_filter": "0", "enabled_variant_count_after_filter": "0",
@@ -171,6 +231,8 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "customer_editable_summary": buyer_schema.get("customer_can_edit_summary", ""), "publish_retry_eligible": "NO", "publish_attempt_count": "0",
         })
         row.update(_storefront_personalization_metadata(row, buyer_schema))
+        defaults = _resolve_publish_defaults(catalog, store_brand=row.get("store_brand", "Crafted Occasion"), product_family=pf)
+        _apply_publish_defaults_to_row(row, defaults, coll)
         _apply_merch(row, coll)
         resolve_profile(row, profile)
         if row.get("launch_status") == "BLOCKED_PROFILE":
