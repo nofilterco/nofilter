@@ -30,6 +30,11 @@ AUTH_HELP_MESSAGE = (
     "--bootstrap-login --channel chrome --user-data-dir local_artifacts/printify_chrome_profile"
 )
 
+CDP_HELP_MESSAGE = (
+    "CDP attach failed. Start Edge/Chrome manually with a remote debugging port, log into Printify, "
+    "then retry with --cdp-url http://localhost:9222."
+)
+
 
 class SelectorNotFoundError(RuntimeError):
     """Raised when no selector strategy matched for a required UI element."""
@@ -393,6 +398,38 @@ def _resolve_channel(channel: str) -> str | None:
     return val or None
 
 
+def _connection_diagnostics(page: Any, context: Any, browser: Any, mode: str) -> dict[str, Any]:
+    current_url = ""
+    if page is not None:
+        try:
+            current_url = str(page.url or "")
+        except Exception:
+            current_url = ""
+
+    page_count = 0
+    context_count = 0
+    if browser is not None:
+        try:
+            context_count = len(browser.contexts)
+        except Exception:
+            context_count = 0
+    elif context is not None:
+        context_count = 1
+
+    if context is not None:
+        try:
+            page_count = len(context.pages)
+        except Exception:
+            page_count = 0
+
+    return {
+        "connection_mode": mode,
+        "current_page_url": current_url,
+        "context_count": context_count,
+        "page_count": page_count,
+    }
+
+
 def _write_shopify_theme_checklist(path: Path) -> str:
     checklist = path / "shopify_theme_personalize_button_checklist.md"
     if checklist.exists():
@@ -412,6 +449,7 @@ def _write_shopify_theme_checklist(path: Path) -> str:
 
 
 def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
+    cdp_url = getattr(args, "cdp_url", "")
     rows = load_rows()
     checklist = _load_checklist_rows(args.checklist_csv)
     targets: list[AutomationTarget] = []
@@ -440,6 +478,11 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
     else:
         mode = "live"
 
+    if cdp_url and args.bootstrap_login:
+        raise ValueError("--cdp-url cannot be combined with --bootstrap-login. Log in manually in the attached browser first.")
+    if cdp_url and args.user_data_dir:
+        raise ValueError("--cdp-url cannot be combined with --user-data-dir. Choose one browser connection mode.")
+
     page = context = browser = playwright = None
     if args.bootstrap_login or not args.plan_only:
         try:
@@ -449,13 +492,27 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
 
         playwright = sync_playwright().start()
         channel = _resolve_channel(args.channel)
-        if args.user_data_dir:
+        if cdp_url:
+            try:
+                browser = playwright.chromium.connect_over_cdp(cdp_url)
+            except Exception as exc:
+                raise RuntimeError(f"{CDP_HELP_MESSAGE} Underlying error: {exc}") from exc
+            context = browser.contexts[0] if browser.contexts else browser.new_context()
+            page = context.pages[0] if context.pages else context.new_page()
+            print(
+                json.dumps(
+                    _connection_diagnostics(page, context, browser, "cdp_attached_browser"),
+                    indent=2,
+                )
+            )
+        elif args.user_data_dir:
             context = playwright.chromium.launch_persistent_context(
                 user_data_dir=args.user_data_dir,
                 headless=False if args.bootstrap_login else args.headless,
                 channel=channel,
             )
             page = context.pages[0] if context.pages else context.new_page()
+            print(json.dumps(_connection_diagnostics(page, context, browser, "persistent_context"), indent=2))
         else:
             browser = playwright.chromium.launch(headless=args.headless, channel=channel)
             context_kwargs: dict[str, Any] = {}
@@ -463,6 +520,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 context_kwargs["storage_state"] = args.storage_state
             context = browser.new_context(**context_kwargs)
             page = context.new_page()
+            print(json.dumps(_connection_diagnostics(page, context, browser, "launched_browser"), indent=2))
 
         if args.bootstrap_login:
             if not args.user_data_dir:
@@ -685,6 +743,12 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 "ui_automation_screenshot_paths": screenshot_paths,
                 "selector_diagnostics": selector_diagnostics,
                 "readiness_diagnostics": readiness_diagnostics or selector_diagnostics.get("readiness", {}),
+                "connection_diagnostics": _connection_diagnostics(
+                    page,
+                    context,
+                    browser,
+                    "cdp_attached_browser" if cdp_url else "persistent_context" if args.user_data_dir else "launched_browser",
+                ),
                 "action_log": action_log,
             }
             report_rows.append(row_record)
@@ -752,6 +816,7 @@ def main() -> None:
     p.add_argument("--storage-state", default="")
     p.add_argument("--channel", default="", help="Optional branded browser channel, e.g. chrome or msedge")
     p.add_argument("--user-data-dir", default="", help="Launch persistent context with this browser profile directory")
+    p.add_argument("--cdp-url", default="", help="Attach to an already-running Chromium browser via CDP, e.g. http://localhost:9222")
     p.add_argument("--bootstrap-login", action="store_true", help="Open Printify login and pause for manual Google sign-in")
     p.add_argument("--timeout-ms", type=int, default=15000)
     p.add_argument("--readiness-timeout-ms", type=int, default=30000)

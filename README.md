@@ -45,7 +45,12 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 - Live run with persistent profile:
   - `python run_queue.py --ui-automation --ui-row-id <id> --ui-channel chrome --ui-user-data-dir local_artifacts/printify_chrome_profile`
 - You can also use `--ui-channel msedge` when Edge is preferred.
-- Legacy state-file flow is still available via `--ui-storage-state`, but persistent profiles are recommended for Google sign-in reliability.
+- CDP attach mode is available when you want to reuse a manually opened, already-logged-in Edge/Chrome session:
+  - Start Edge (example): `msedge --remote-debugging-port=9222 --user-data-dir=/tmp/printify-edge-cdp-profile`
+  - Log into Printify manually in that browser window.
+  - Dry-run attach: `python run_queue.py --ui-automation --ui-row-id <id> --dry-run --ui-cdp-url http://localhost:9222`
+  - Live attach: `python run_queue.py --ui-automation --ui-row-id <id> --ui-cdp-url http://localhost:9222`
+- Legacy state-file flow is still available via `--ui-storage-state`, but persistent profiles/CDP attach are recommended for Google sign-in reliability.
 - Explicit targeting remains required for real UI automation (`--ui-row-id`, `--ui-listing-slug`, or `--ui-manual-required-synced-only`).
 - Dry-run still performs no publish click; `--ui-screenshot-only` remains non-clicking selector/screenshot probing.
 - Artifacts are written to `out/printify_ui_automation/`:

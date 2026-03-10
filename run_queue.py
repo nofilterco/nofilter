@@ -439,6 +439,7 @@ def main() -> None:
     p.add_argument("--ui-storage-state", default="")
     p.add_argument("--ui-channel", default="")
     p.add_argument("--ui-user-data-dir", default="")
+    p.add_argument("--ui-cdp-url", default="")
     p.add_argument("--ui-bootstrap-login", action="store_true")
     p.add_argument("--ui-timeout-ms", type=int, default=15000)
     p.add_argument("--ui-limit", type=int, default=0)
@@ -467,6 +468,7 @@ def main() -> None:
             storage_state=args.ui_storage_state,
             channel=args.ui_channel,
             user_data_dir=args.ui_user_data_dir,
+            cdp_url=args.ui_cdp_url,
             bootstrap_login=args.ui_bootstrap_login,
             timeout_ms=args.ui_timeout_ms,
             limit=args.ui_limit,
