@@ -29,6 +29,10 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 - **manual personalization setup**: rows with `needs_manual_personalization_setup=YES` and `launch_status=MANUAL_PERSONALIZATION_REQUIRED` require Shopify personalization setup before launch.
 - **current launch scope**: bridal-party tees/hoodies and family-reunion tee/hoodie/mug are active; tote is excluded from seeding for now.
 
+## Local helper scripts
+- `scripts/local_launch_test.sh` — safer end-to-end local launch test: loads `.env`, verifies Printify credentials, resolves/validates required profile IDs and variants, backs up `queue.csv` + `reports/` + `catalog/product_profiles.yaml` to `local_artifacts/`, reseeds the launch collections, builds assets, generates setup packets, approves/publishes all rows, rechecks sync, and exports report/manual setup outputs.
+- `scripts/recheck_sync_only.sh` — lightweight follow-up check that loads `.env`, runs `--recheck-sync`, and exports both launch and manual-setup reports.
+
 ## Publish notes
 - Tee / hoodie / mug flows are active and remain default publish path.
 - Tote publishing remains blocked for any legacy tote rows until profile mapping is finalized with blueprint/provider/variant IDs.
