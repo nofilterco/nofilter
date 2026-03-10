@@ -175,9 +175,6 @@ def build_printify_payload(row: dict[str, str]) -> dict[str, Any]:
             }],
         }],
     }
-    sales_channel_collections = [v.strip() for v in (row.get("shopify_sales_channel_collections") or "").split(",") if v.strip()]
-    if sales_channel_collections:
-        payload["sales_channel_properties"] = {"shopify": {"collections": sales_channel_collections}}
     return payload
 
 
@@ -210,6 +207,8 @@ def _publish_sync_details(row: dict[str, str]) -> dict[str, bool]:
 def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
     variants = payload.get("variants") if isinstance(payload.get("variants"), list) else []
     area_count = len(payload.get("print_areas") or [])
+    sales_channel_properties = payload.get("sales_channel_properties") if isinstance(payload.get("sales_channel_properties"), dict) else None
+    sales_channel_keys = list(sales_channel_properties.keys()) if isinstance(sales_channel_properties, dict) else []
     return {
         "title": payload.get("title", ""),
         "blueprint_id": payload.get("blueprint_id"),
@@ -218,6 +217,8 @@ def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "variant_ids_sample": [v.get("id") for v in variants[:5] if isinstance(v, dict)],
         "print_area_count": area_count,
         "tag_count": len(payload.get("tags") or []),
+        "sales_channel_properties_present": bool(sales_channel_properties),
+        "sales_channel_properties_keys": sales_channel_keys,
     }
 
 
@@ -233,7 +234,13 @@ def validate_printify_shop_access(shop_id: str) -> tuple[bool, str]:
 
 def _set_publish_failure(row: dict[str, str], *, stage: str, message: str, response: dict[str, Any] | None = None) -> None:
     row["error_stage"] = stage
-    row["error_message"] = message
+    payload_summary = response.get("payload_summary") if isinstance(response, dict) and isinstance(response.get("payload_summary"), dict) else {}
+    diagnostics_suffix = ""
+    if payload_summary:
+        present = payload_summary.get("sales_channel_properties_present")
+        keys = payload_summary.get("sales_channel_properties_keys") or []
+        diagnostics_suffix = f" | payload_diagnostics: sales_channel_properties_present={present}, sales_channel_properties_keys={keys}"
+    row["error_message"] = f"{message}{diagnostics_suffix}"[:2000]
     row["printify_publish_status"] = "PUBLISH_FAILED"
     row["status"] = "PUBLISH_FAILED"
     row["launch_status"] = "PUBLISH_FAILED"
