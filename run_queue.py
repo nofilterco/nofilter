@@ -437,6 +437,9 @@ def main() -> None:
     p.add_argument("--ui-headless", action="store_true")
     p.add_argument("--ui-confirm-each", action="store_true")
     p.add_argument("--ui-storage-state", default="")
+    p.add_argument("--ui-channel", default="")
+    p.add_argument("--ui-user-data-dir", default="")
+    p.add_argument("--ui-bootstrap-login", action="store_true")
     p.add_argument("--ui-timeout-ms", type=int, default=15000)
     p.add_argument("--ui-limit", type=int, default=0)
     args = p.parse_args()
@@ -462,8 +465,13 @@ def main() -> None:
             headless=args.ui_headless,
             confirm_each=args.ui_confirm_each,
             storage_state=args.ui_storage_state,
+            channel=args.ui_channel,
+            user_data_dir=args.ui_user_data_dir,
+            bootstrap_login=args.ui_bootstrap_login,
             timeout_ms=args.ui_timeout_ms,
             limit=args.ui_limit,
+            readiness_timeout_ms=30000,
+            pause_after_open=False,
         ))
         print(f"ui_automation={json.dumps(result)}")
 
