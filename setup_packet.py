@@ -48,6 +48,10 @@ def generate_setup_packet(row: dict[str, str]) -> dict[str, Any]:
     has_text, has_image, has_logo = bool(text_packet), bool(image_packet), bool(logo_packet)
     snippet_list = _storefront_copy_snippets(has_text, has_image, has_logo)
 
+    personalization_hub_ready = row.get("personalization_hub_ready", "NO")
+    requires_republish = row.get("requires_shopify_republish_for_personalization", "NO")
+    personalize_button_required = row.get("printify_personalize_button_required", "YES" if (has_text or has_image or has_logo) else "NO")
+
     packet = {
         "listing_id": row.get("id", ""),
         "listing_slug": row.get("listing_slug", ""),
@@ -60,6 +64,11 @@ def generate_setup_packet(row: dict[str, str]) -> dict[str, Any]:
         "recommended_preview_artifact": preview_paths.get("primary_preview", row.get("asset_local_path", "")),
         "helper_text": buyer_schema.get("helper_text") or row.get("personalization_instructions", ""),
         "customer_can_edit_summary": row.get("customer_editable_summary", ""),
+        "personalization_hub_readiness": {
+            "personalization_hub_ready": personalization_hub_ready,
+            "requires_shopify_republish_for_personalization": requires_republish,
+            "printify_personalize_button_required": personalize_button_required,
+        },
         "manual_setup_guide": {
             "hub": "Printify Personalization Hub",
             "field_definitions": {
@@ -76,6 +85,7 @@ def generate_setup_packet(row: dict[str, str]) -> dict[str, Any]:
                 "subtext": row.get("storefront_personalization_subtext", "Add your name, date, photo, or logo before checkout"),
                 "badges": [b.strip() for b in (row.get("storefront_badges", "")).split(",") if b.strip()],
                 "product_page_snippets": snippet_list,
+                "shopify_app_block_reminder": "Add/verify the Printify Personalize Button app block on the Shopify product page template.",
             },
         },
     }

@@ -692,3 +692,168 @@ launch_listings:
   suggested_retail_price_cents: 1999
   publish_mode: personalized
   template_family: photo_keepsake
+- listing_slug: bride-squad-premium-tee
+  listing_template_id: wedding-text-only-template
+  product_profile_id: adult_tee_g5000
+  collection_slug: bridal-party
+  exact_title: Bride Squad Premium Personalized T-Shirt
+  exact_html_description: <p>Premium bridal-party tee with elevated typography for bachelorette and wedding weekend looks.</p>
+  exact_tags:
+  - crafted-occasion
+  - bride-squad
+  - collection-bridal-party
+  personalization_fields:
+  - field_key: person_name
+    field_label: Name
+    field_type: text
+    max_length: 20
+    required: true
+    placeholder: Olivia
+  - field_key: wedding_city
+    field_label: Wedding City
+    field_type: text
+    max_length: 22
+    required: false
+    placeholder: Charleston
+  launch_visible_sizes:
+  - S
+  - M
+  - L
+  - XL
+  - 2XL
+  launch_visible_colors:
+  - White
+  - Black
+  - Sport Grey
+  - Navy
+  - Light Pink
+  suggested_retail_price_cents: 2799
+  publish_mode: personalized
+  template_family: text_only
+  style_variant: soft_script
+- listing_slug: bride-squad-luxe-hoodie
+  listing_template_id: wedding-text-plus-logo-template
+  product_profile_id: hoodie_g18500
+  collection_slug: bridal-party
+  exact_title: Bride Squad Luxe Custom Hoodie
+  exact_html_description: <p>Luxe bridal-party hoodie with bold crest styling and optional monogram upload.</p>
+  exact_tags:
+  - crafted-occasion
+  - bride-squad
+  - luxe-hoodie
+  - collection-bridal-party
+  personalization_fields:
+  - field_key: wedding_city
+    field_label: Wedding City
+    field_type: text
+    max_length: 24
+    required: false
+    placeholder: Scottsdale
+  - field_key: event_year
+    field_label: Event Year
+    field_type: date
+    required: true
+    placeholder: 2026
+  launch_visible_sizes:
+  - S
+  - M
+  - L
+  - XL
+  - 2XL
+  - 3XL
+  - 4XL
+  - 5XL
+  launch_visible_colors:
+  - White
+  - Black
+  - Sport Grey
+  - Sand
+  - Navy
+  - Maroon
+  suggested_retail_price_cents: 4699
+  publish_mode: both
+  template_family: monogram_badge
+  style_variant: crest_badge
+- listing_slug: heritage-reunion-photo-tee
+  listing_template_id: reunion-template
+  product_profile_id: adult_tee_g5000
+  collection_slug: family-reunion
+  exact_title: Heritage Reunion Premium Photo T-Shirt
+  exact_html_description: <p>Premium family reunion tee with polished photo-forward layout and optional logo upload.</p>
+  exact_tags:
+  - crafted-occasion
+  - family-reunion
+  - photo-tee
+  - collection-family-reunion
+  personalization_fields:
+  - field_key: family_name
+    field_label: Family Name
+    field_type: text
+    max_length: 24
+    required: true
+    placeholder: Harrison
+  - field_key: reunion_year
+    field_label: Reunion Year
+    field_type: date
+    required: true
+    placeholder: 2026
+  - field_key: reunion_city
+    field_label: Reunion City
+    field_type: text
+    max_length: 24
+    required: false
+    placeholder: New Orleans
+  launch_visible_sizes:
+  - S
+  - M
+  - L
+  - XL
+  - 2XL
+  launch_visible_colors:
+  - White
+  - Black
+  - Sport Grey
+  - Navy
+  - Light Blue
+  suggested_retail_price_cents: 2899
+  publish_mode: both
+  template_family: text_plus_photo
+  style_variant: photo_postcard
+- listing_slug: heritage-reunion-wrap-mug
+  listing_template_id: reunion-template
+  product_profile_id: mug_orca_color
+  collection_slug: family-reunion
+  exact_title: Heritage Reunion Premium Wrap Mug
+  exact_html_description: <p>Premium wrap mug for reunion keepsakes with family name, year, and optional photo upload.</p>
+  exact_tags:
+  - crafted-occasion
+  - family-reunion
+  - wrap-mug
+  - collection-family-reunion
+  personalization_fields:
+  - field_key: family_name
+    field_label: Family Name
+    field_type: text
+    max_length: 28
+    required: true
+    placeholder: Harrison
+  - field_key: reunion_year
+    field_label: Reunion Year
+    field_type: date
+    required: true
+    placeholder: 2026
+  launch_visible_sizes:
+  - 11oz
+  - 15oz
+  launch_visible_colors:
+  - Black
+  - Navy
+  - Cambridge Blue
+  - Light Blue
+  - Green
+  - Yellow
+  - Red
+  suggested_retail_price_cents: 2299
+  publish_mode: both
+  template_family: text_plus_photo
+  style_variant: photo_postcard

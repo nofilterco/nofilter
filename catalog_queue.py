@@ -16,6 +16,7 @@ NEW_SCHEMA = [
     "profile_resolved","blueprint_id","provider_id","matched_variant_count","enabled_variant_count_before_filter","enabled_variant_count_after_filter","customer_editable_summary",
     "customizable_badge_text","personalization_cta","editable_fields_summary","supports_photo_upload","supports_logo_upload","supports_text_edit",
     "storefront_personalization_headline","storefront_personalization_subtext","storefront_badges",
+    "personalization_hub_ready","requires_shopify_republish_for_personalization","printify_personalize_button_required",
     "publish_retry_eligible","publish_attempt_count"
 ]
 
@@ -94,6 +95,20 @@ def _derive_storefront_personalization(row: dict[str, str]) -> dict[str, str]:
     if logo_fields:
         badges.append("Logo Upload")
 
+    has_personalization = bool(text_fields or image_fields or logo_fields)
+    supports_any = any([
+        (row.get("supports_text_edit") or ("YES" if text_fields else "NO")) == "YES",
+        (row.get("supports_photo_upload") or ("YES" if image_fields else "NO")) == "YES",
+        (row.get("supports_logo_upload") or ("YES" if logo_fields else "NO")) == "YES",
+    ])
+    is_synced = (row.get("shopify_sync_status") or "") == "SYNCED_TO_SHOPIFY" and bool(row.get("shopify_product_id"))
+    packet_ready = row.get("manual_setup_status") == "generated" and bool(row.get("manual_setup_packet_path"))
+    needs_manual = row.get("needs_manual_personalization_setup", "NO") == "YES"
+
+    requires_republish = "YES" if (is_synced and supports_any and needs_manual) else "NO"
+    personalize_button_required = "YES" if (has_personalization or supports_any) else "NO"
+    personalization_hub_ready = "YES" if (supports_any and is_synced and packet_ready and not needs_manual) else "NO"
+
     return {
         "customer_editable_summary": summary,
         "editable_fields_summary": row.get("editable_fields_summary") or summary,
@@ -107,6 +122,9 @@ def _derive_storefront_personalization(row: dict[str, str]) -> dict[str, str]:
             "Add your name, date, photo, or logo before checkout" if badges else "Thoughtful design for special moments"
         ),
         "storefront_badges": row.get("storefront_badges") or ", ".join(badges),
+        "personalization_hub_ready": row.get("personalization_hub_ready") or personalization_hub_ready,
+        "requires_shopify_republish_for_personalization": row.get("requires_shopify_republish_for_personalization") or requires_republish,
+        "printify_personalize_button_required": row.get("printify_personalize_button_required") or personalize_button_required,
     }
 
 
@@ -218,7 +236,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -247,5 +265,27 @@ def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
             enriched["storefront_preview_style"] = r.get("preview_style", "")
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
             enriched.update(_derive_storefront_personalization(r))
+            w.writerow({k: enriched.get(k, "") for k in fieldnames})
+    return path
+
+
+def dump_storefront_personalization_checklist_csv(path: str = "shopify_personalization_setup_checklist.csv") -> str:
+    rows = [r for r in _operational_rows() if (r.get("shopify_product_id") or "").strip()]
+    fieldnames = [
+        "id", "title", "listing_slug", "shopify_product_id", "printify_product_id", "template_family", "style_variant",
+        "customer_editable_summary", "editable_fields_summary", "supports_text_edit", "supports_photo_upload", "supports_logo_upload",
+        "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required",
+        "manual_setup_status", "manual_setup_packet_path", "storefront_personalization_headline", "storefront_personalization_subtext",
+        "storefront_badges", "preview_artifacts_json", "storefront_setup_reminder",
+    ]
+    reminder = "Add/verify the Printify Personalize Button app block on Shopify product template and test storefront customization visibility."
+    with Path(path).open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in rows:
+            enriched = dict(r)
+            enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
+            enriched.update(_derive_storefront_personalization(r))
+            enriched["storefront_setup_reminder"] = reminder
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path

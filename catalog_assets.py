@@ -65,6 +65,10 @@ LISTING_STYLE_VARIANTS = {
     "family-reunion-personalized-tee": "retro_arch",
     "cousin-crew-reunion-hoodie": "crest_badge",
     "family-name-reunion-color-mug": "photo_postcard",
+    "bride-squad-premium-tee": "soft_script",
+    "bride-squad-luxe-hoodie": "crest_badge",
+    "heritage-reunion-photo-tee": "photo_postcard",
+    "heritage-reunion-wrap-mug": "photo_postcard",
 }
 
 STYLE_VARIANT_TO_ART = {
@@ -187,9 +191,9 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
 
     sx, sy, sw, sh = SAFE_AREAS.get(family, SAFE_AREAS["tee"])
     family_tuning = {
-        "hoodie": {"y": sy + 0.02, "h": sh - 0.01},
+        "hoodie": {"x": sx - 0.02, "y": sy - 0.03, "w": sw + 0.12, "h": sh + 0.08},
         "crewneck": {"y": sy + 0.01, "h": sh - 0.01},
-        "tee": {"y": sy + 0.005, "h": sh - 0.005},
+        "tee": {"x": sx - 0.015, "y": sy - 0.02, "w": sw + 0.09, "h": sh + 0.07},
         "mug": {"x": sx - 0.005, "w": sw + 0.01},
         "tote": {"y": sy + 0.02, "h": sh - 0.02},
     }.get(family, {})
@@ -220,14 +224,14 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
         tx, ty = safe[0] + (box_w - (bb[2] - bb[0])) // 2, safe[1] + (box_h - (bb[3] - bb[1])) // 2
         if strategy == "minimal_block":
             pad = int(font.size * 0.65)
-            draw.rounded_rectangle((tx - pad, ty - pad, tx + (bb[2] - bb[0]) + pad, ty + (bb[3] - bb[1]) + pad), radius=22, fill=(*accent[:3], 40), outline=accent, width=5)
+            draw.rounded_rectangle((tx - pad, ty - pad, tx + (bb[2] - bb[0]) + pad, ty + (bb[3] - bb[1]) + pad), radius=22, fill=(*accent[:3], 40), outline=accent, width=7)
         draw.multiline_text((tx, ty), text, font=font, fill=ink, align="center", spacing=max(4, font.size // 7))
     elif strategy == "arch_badge":
-        ring, cx, cy = min(box_w, box_h) // 2 - 18, safe[0] + box_w // 2, safe[1] + box_h // 2
-        draw.ellipse((cx - ring, cy - ring, cx + ring, cy + ring), outline=accent, width=10)
+        ring, cx, cy = int(min(box_w, box_h) * 0.49), safe[0] + box_w // 2, safe[1] + box_h // 2
+        draw.ellipse((cx - ring, cy - ring, cx + ring, cy + ring), outline=accent, width=14)
         top, bottom = (text.split("\n") + ["REUNION"])[0], text.split("\n")[-1]
-        f1 = _fit_text(draw, top, "mono", (int(box_w * 0.8), int(box_h * 0.20)), min_font - 8, 0.95)
-        f2 = _fit_text(draw, bottom, "sans", (int(box_w * 0.75), int(box_h * 0.25)), min_font - 4, 0.95)
+        f1 = _fit_text(draw, top, "mono", (int(box_w * 0.84), int(box_h * 0.22)), min_font - 6, 0.97)
+        f2 = _fit_text(draw, bottom, "sans", (int(box_w * 0.80), int(box_h * 0.28)), min_font - 2, 0.97)
         draw.text((cx - draw.textlength(top, font=f1) // 2, cy - int(ring * 0.45)), top, font=f1, fill=ink)
         draw.text((cx - draw.textlength(bottom, font=f2) // 2, cy - int(ring * 0.05)), bottom, font=f2, fill=ink)
         _draw_icon(draw, icons[0], cx - 26, cy + int(ring * 0.34), accent, max(24, f1.size))
@@ -236,7 +240,7 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
         bb = draw.multiline_textbbox((0, 0), text, font=font, align="center", spacing=max(3, font.size // 9))
         tx, ty = safe[0] + (box_w - (bb[2] - bb[0])) // 2, safe[1] + (box_h - (bb[3] - bb[1])) // 2
         yline = ty + (bb[3] - bb[1]) + int(font.size * 0.25)
-        draw.line((safe[0] + int(box_w * 0.08), yline, safe[2] - int(box_w * 0.08), yline), fill=accent, width=8)
+        draw.line((safe[0] + int(box_w * 0.08), yline, safe[2] - int(box_w * 0.08), yline), fill=accent, width=10)
         draw.multiline_text((tx, ty), text, font=font, fill=ink, align="center")
     elif strategy == "varsity_block":
         font = _fit_text(draw, text.upper(), "mono", (int(box_w * 0.96), int(box_h * 0.82)), min_font, 0.96)
@@ -252,16 +256,16 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
         bb = draw.multiline_textbbox((0, 0), text, font=font, align="center")
         draw.multiline_text((cx - (bb[2] - bb[0]) // 2, cy - (bb[3] - bb[1]) // 2), text, font=font, fill=ink, align="center")
     elif strategy == "photo_postcard":
-        draw.rounded_rectangle((safe[0], safe[1], safe[2], safe[3]), radius=24, outline=accent, width=9, fill=(*accent[:3], 24))
+        draw.rounded_rectangle((safe[0], safe[1], safe[2], safe[3]), radius=24, outline=accent, width=12, fill=(*accent[:3], 28))
         photo_box = (safe[0] + int(box_w * 0.06), safe[1] + int(box_h * 0.10), safe[2] - int(box_w * 0.06), safe[1] + int(box_h * 0.66))
-        draw.rectangle(photo_box, outline=ink, width=5)
-        draw.line((photo_box[0], photo_box[1], photo_box[2], photo_box[3]), fill=accent, width=4)
-        draw.line((photo_box[2], photo_box[1], photo_box[0], photo_box[3]), fill=accent, width=4)
+        draw.rectangle(photo_box, outline=ink, width=7)
+        draw.line((photo_box[0], photo_box[1], photo_box[2], photo_box[3]), fill=accent, width=6)
+        draw.line((photo_box[2], photo_box[1], photo_box[0], photo_box[3]), fill=accent, width=6)
         caption = text.split("\n")[-1]
         font = _fit_text(draw, caption, "regular", (int(box_w * 0.85), int(box_h * 0.2)), min_font - 10, 0.95)
         draw.text((safe[0] + int(box_w * 0.1), safe[1] + int(box_h * 0.72)), caption, font=font, fill=ink)
     elif strategy == "western_bach":
-        draw.rounded_rectangle((safe[0], safe[1] + 20, safe[2], safe[3] - 20), radius=18, outline=accent, width=6)
+        draw.rounded_rectangle((safe[0], safe[1] + 20, safe[2], safe[3] - 20), radius=18, outline=accent, width=8)
         header = "BACH WEEKEND"
         top_font = _fit_text(draw, header, "mono", (int(box_w * 0.8), int(box_h * 0.15)), min_font - 16, 0.95)
         draw.text((safe[0] + (box_w - int(draw.textlength(header, font=top_font))) // 2, safe[1] + int(box_h * 0.08)), header, font=top_font, fill=accent)
@@ -272,13 +276,13 @@ def build_placeholder_asset(text: str, slug: str, width: int = 1800, height: int
         initial = "".join([p[:1].upper() for p in text.replace("\n", " ").split()[:2]]) or "CO"
         font = _fit_text(draw, initial, "mono", (int(box_w * 0.58), int(box_h * 0.58)), min_font, 0.95)
         cx, cy, frame = safe[0] + box_w // 2, safe[1] + box_h // 2, min(box_w, box_h) * 0.40
-        draw.rectangle((cx - frame, cy - frame, cx + frame, cy + frame), outline=accent, width=12)
+        draw.rectangle((cx - frame, cy - frame, cx + frame, cy + frame), outline=accent, width=16)
         draw.text((cx - draw.textlength(initial, font=font) // 2, cy - font.size // 2), initial, font=font, fill=ink)
         _draw_icon(draw, icons[0], int(cx - frame - 30), int(cy - frame - 34), accent, max(22, font.size // 3))
     else:  # wrap_mug + fallback
-        band_h = int(box_h * 0.56)
+        band_h = int(box_h * 0.62)
         y1 = safe[1] + (box_h - band_h) // 2
-        draw.rounded_rectangle((safe[0], y1, safe[2], y1 + band_h), radius=28, fill=(*accent[:3], 36), outline=accent, width=6)
+        draw.rounded_rectangle((safe[0], y1, safe[2], y1 + band_h), radius=28, fill=(*accent[:3], 44), outline=accent, width=10)
         font = _fit_text(draw, text, "sans", (int(box_w * 0.88), int(band_h * 0.75)), min_font, 0.9)
         bb = draw.multiline_textbbox((0, 0), text, font=font, align="center")
         draw.multiline_text((safe[0] + (box_w - (bb[2] - bb[0])) // 2, y1 + (band_h - (bb[3] - bb[1])) // 2), text, font=font, fill=ink, align="center")
