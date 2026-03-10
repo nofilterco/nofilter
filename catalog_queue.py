@@ -167,7 +167,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -176,6 +176,7 @@ def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_in
             enriched["art_strategy_internal"] = r.get("placeholder_art_mode", "")
             enriched["preview_style"] = r.get("preview_style", "")
             enriched["storefront_preview_style"] = r.get("preview_style", "")
+            enriched["stock_mode"] = "in_stock_only" if (r.get("in_stock_only") == "YES") else "all_variants"
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
 
