@@ -211,20 +211,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_plus_logo
@@ -250,20 +242,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_plus_logo
@@ -295,20 +279,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: both
   template_family: text_plus_photo
@@ -410,20 +386,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_only
@@ -495,20 +463,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_only
@@ -536,20 +496,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_only
@@ -653,20 +605,12 @@ launch_listings:
   - L
   - XL
   - 2XL
-  - 3XL
-  - 4XL
-  - 5XL
   launch_visible_colors:
   - White
   - Black
   - Sport Grey
-  - Ash
-  - Sand
-  - Natural
   - Navy
-  - Light Blue
   - Light Pink
-  - Military Green
   suggested_retail_price_cents: 2499
   publish_mode: personalized
   template_family: text_only

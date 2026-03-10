@@ -16,8 +16,8 @@ product_profiles:
     brand_model_label: Gildan 5000 Adult Tee
     printify_blueprint_hints: {model: "G5000", blueprint_id: 0, provider_id: 0}
     provider_selection_rules: "Prefer US provider with broad color coverage"
-    launch_visible_sizes: [S, M, L, XL, 2XL, 3XL, 4XL, 5XL]
-    launch_visible_colors: [White, Black, Sport Grey, Ash, Sand, Natural, Navy, Light Blue, Light Pink, Military Green]
+    launch_visible_sizes: [S, M, L, XL, 2XL]
+    launch_visible_colors: [White, Black, Sport Grey, Navy, Light Pink]
     full_catalog_metadata: {}
     retail_pricing_defaults: {default_cents: 2499}
     personalization_capability: text
