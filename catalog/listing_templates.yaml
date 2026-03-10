@@ -21,15 +21,15 @@ listing_templates:
   contrast_mode: auto
   product_safe_area: &id004
     tee:
-      x: 0.16
-      y: 0.18
-      w: 0.68
-      h: 0.58
+      x: 0.12
+      y: 0.15
+      w: 0.75
+      h: 0.65
     hoodie:
-      x: 0.15
-      y: 0.2
-      w: 0.7
-      h: 0.55
+      x: 0.09
+      y: 0.16
+      w: 0.82
+      h: 0.64
     crewneck:
       x: 0.15
       y: 0.19
@@ -129,15 +129,15 @@ listing_templates:
   contrast_mode: auto
   product_safe_area: &id008
     tee:
-      x: 0.16
-      y: 0.18
-      w: 0.68
-      h: 0.58
+      x: 0.12
+      y: 0.15
+      w: 0.75
+      h: 0.65
     hoodie:
-      x: 0.15
-      y: 0.2
-      w: 0.7
-      h: 0.55
+      x: 0.09
+      y: 0.16
+      w: 0.82
+      h: 0.64
     mug:
       x: 0.08
       y: 0.28
@@ -249,15 +249,15 @@ listing_templates:
   contrast_mode: auto
   product_safe_area: &id012
     tee:
-      x: 0.16
-      y: 0.18
-      w: 0.68
-      h: 0.58
+      x: 0.12
+      y: 0.15
+      w: 0.75
+      h: 0.65
     mug:
       x: 0.08
-      y: 0.28
-      w: 0.84
-      h: 0.42
+      y: 0.27
+      w: 0.86
+      h: 0.46
     tote:
       x: 0.14
       y: 0.18
@@ -346,15 +346,15 @@ listing_templates:
   contrast_mode: auto
   product_safe_area: &id016
     tee:
-      x: 0.16
-      y: 0.18
-      w: 0.68
-      h: 0.58
+      x: 0.12
+      y: 0.15
+      w: 0.75
+      h: 0.65
     mug:
       x: 0.08
-      y: 0.28
-      w: 0.84
-      h: 0.42
+      y: 0.27
+      w: 0.86
+      h: 0.46
   seo_keywords:
   - wedding monogram shirt
   - bridal logo apparel
@@ -440,15 +440,15 @@ listing_templates:
   contrast_mode: auto
   product_safe_area: &id020
     tee:
-      x: 0.16
-      y: 0.18
-      w: 0.68
-      h: 0.58
+      x: 0.12
+      y: 0.15
+      w: 0.75
+      h: 0.65
     mug:
       x: 0.08
-      y: 0.28
-      w: 0.84
-      h: 0.42
+      y: 0.27
+      w: 0.86
+      h: 0.46
   seo_keywords:
   - photo wedding gift
   - custom couple mug

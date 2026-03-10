@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from catalog_assets import build_placeholder_asset, build_storefront_preview_set, default_placeholder_text, resolve_art_strategy, style_variant_for_listing
 from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
 from catalog_config import catalog_indexes, load_catalog
-from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, load_rows, next_id, save_rows
+from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, dump_storefront_personalization_checklist_csv, load_rows, next_id, save_rows
 from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants, validate_printify_shop_access
 from setup_packet import generate_setup_packet
 from status_model import derive_launch_status, normalize_publish_status, normalize_sync_status
@@ -62,17 +62,28 @@ def _storefront_personalization_metadata(row: dict[str, Any], buyer_schema: dict
         badges.append("Logo Upload")
     summary = row.get("customer_editable_summary") or schema.get("customer_can_edit_summary") or f"Text: {len(text_fields)} fields | Image uploads: {len(image_fields)} | Logo uploads: {len(logo_fields)}"
 
+    supports_text = "YES" if text_fields else "NO"
+    supports_photo = "YES" if image_fields else "NO"
+    supports_logo = "YES" if logo_fields else "NO"
+    supports_any = any(v == "YES" for v in [supports_text, supports_photo, supports_logo])
+    is_synced = (row.get("shopify_sync_status") or "") == "SYNCED_TO_SHOPIFY" and bool(row.get("shopify_product_id"))
+    manual_required = row.get("needs_manual_personalization_setup", "NO") == "YES"
+    packet_generated = row.get("manual_setup_status") == "generated" and bool(row.get("manual_setup_packet_path"))
+
     return {
         "customer_editable_summary": summary,
         "editable_fields_summary": ", ".join(labels) if labels else summary,
-        "supports_text_edit": "YES" if text_fields else "NO",
-        "supports_photo_upload": "YES" if image_fields else "NO",
-        "supports_logo_upload": "YES" if logo_fields else "NO",
+        "supports_text_edit": supports_text,
+        "supports_photo_upload": supports_photo,
+        "supports_logo_upload": supports_logo,
         "customizable_badge_text": "Personalizable" if badges else "Ready to Order",
         "personalization_cta": "Customize with your name" if text_fields else "Choose options",
         "storefront_personalization_headline": "Make it yours" if badges else "Made for gifting",
         "storefront_personalization_subtext": "Add your name, date, photo, or logo before checkout" if badges else "Crafted keepsake for special occasions",
         "storefront_badges": ", ".join(badges),
+        "personalization_hub_ready": "YES" if (supports_any and is_synced and packet_generated and not manual_required) else "NO",
+        "requires_shopify_republish_for_personalization": "YES" if (supports_any and is_synced and manual_required) else "NO",
+        "printify_personalize_button_required": "YES" if supports_any else "NO",
     }
 
 
@@ -363,7 +374,7 @@ def main() -> None:
     if args.recheck_sync: print(f"sync_checked={recheck_sync()}")
     if args.setup_packets: print(f"setup_packets={generate_setup_packets()}")
     if args.export_manual_setup_only: print(f"manual_setup_export={dump_manual_setup_only_csv()}")
-    if args.export_report: print(f"report={dump_launch_report()} ops_csv={dump_ops_review_csv()}")
+    if args.export_report: print(f"report={dump_launch_report()} ops_csv={dump_ops_review_csv()} checklist_csv={dump_storefront_personalization_checklist_csv()}")
 
 
 if __name__ == "__main__":
