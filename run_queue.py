@@ -117,6 +117,8 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "price_cents": str(item.get("suggested_retail_price_cents", profile.get("retail_pricing_defaults", {}).get("default_cents", 2499))),
             "variant_strategy": "curated_launch", "show_all_variants": "NO", "in_stock_only": "YES" if pf in {"tee", "hoodie", "crewneck", "mug"} else "NO",
             "printify_publish_status": "NOT_ATTEMPTED", "shopify_sync_status": "NOT_ATTEMPTED", "launch_status": "NOT_ATTEMPTED",
+            "profile_resolved": "", "blueprint_id": "0", "provider_id": "0", "matched_variant_count": "0",
+            "enabled_variant_count_before_filter": "0", "enabled_variant_count_after_filter": "0",
             "publish_log_history_json": json.dumps([{"ts": now_iso(), "event": "SEEDED", "detail": slug}]), "debug_trace": f"{now_iso()}:seeded",
         })
         _apply_merch(row, coll)
@@ -248,12 +250,17 @@ def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str 
         try:
             if row.get("launch_status") == "BLOCKED_PROFILE" or row.get("status") == "BLOCKED_PROFILE":
                 row["status"] = "BLOCKED_PROFILE"; row["launch_status"] = "BLOCKED_PROFILE"
+            elif row.get("profile_resolved") == "NO":
+                row["pipeline_stage"] = "BLOCKED_PROFILE"; row["status"] = "BLOCKED_PROFILE"; row["launch_status"] = "BLOCKED_PROFILE"
+                row["printify_publish_status"] = "BLOCKED_PROFILE"; row["shopify_sync_status"] = "BLOCKED_PROFILE"
+                row["error_stage"] = "PROFILE"
+                row["error_message"] = row.get("error_message") or "Unresolved profile metadata: blueprint/provider/variant IDs missing. Run Printify profile resolver."
             elif not json.loads(row.get("enabled_variant_ids_json") or "[]"):
                 row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"
                 row["printify_publish_status"] = "PUBLISH_FAILED"
-                row["error_stage"] = row.get("error_stage") or "PUBLISH"
-                row["error_message"] = row.get("error_message") or "No enabled variant ids resolved"
-            elif not dry_run and not shop_valid and row.get("product_family") != "tote":
+                row["error_stage"] = "PUBLISH"
+                row["error_message"] = row.get("error_message") or "Resolved profile variant IDs found, but active size/color/stock rules reduced usable variants to zero."
+            elif not dry_run and not shop_valid:
                 row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"
                 row["printify_publish_status"] = "PUBLISH_FAILED"
                 row["error_stage"] = "PRINTIFY_CONFIG"

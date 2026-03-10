@@ -16,6 +16,7 @@ import yaml
 BASE = "https://api.printify.com/v1"
 DEFAULT_PROFILES_PATH = Path("catalog/product_profiles.yaml")
 TOKEN_ENV = "PRINTIFY_TOKEN"
+SHOP_ENV = "PRINTIFY_SHOP_ID"
 
 _SIZE_TOKENS = {
     "xxs",
@@ -388,6 +389,21 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
         _print(f"[ERROR] Missing {TOKEN_ENV}")
         _print(f"Updated 0 profile(s) in {profiles_path}")
         return 1
+    shop_id = os.getenv(SHOP_ENV, "").strip()
+    _print(f"[INFO] {TOKEN_ENV} loaded: YES (len={len(token)})")
+    _print(f"[INFO] {SHOP_ENV} loaded: {'YES' if shop_id else 'NO'}")
+
+    if shop_id:
+        try:
+            shops = _request_json(token, "/shops.json", debug_http=debug_http)
+            if isinstance(shops, list):
+                visible = {str(s.get("id", "")) for s in shops if isinstance(s, dict)}
+                status = "visible" if shop_id in visible else "NOT visible"
+                _print(f"[INFO] Shop access check: shop_id={shop_id} is {status} to this token")
+            else:
+                _print("[WARN] Shop access check: unexpected /shops.json response shape")
+        except PrintifyRequestError:
+            _print("[WARN] Shop access check failed; continuing with blueprint/provider resolution")
 
     try:
         doc, profiles = load_profiles(profiles_path, debug=debug)
@@ -404,6 +420,7 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
         return 1
 
     changed = 0
+    failed_profiles = 0
     providers_cache: dict[int, list[dict[str, Any]]] = {}
     variants_cache: dict[tuple[int, int], list[dict[str, Any]]] = {}
 
@@ -482,10 +499,6 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
             )
             _debug(debug, f"Profile {profile_id} matched variant count: {matched_count}")
 
-            if matched_count == 0:
-                _print(f"[WARN] {profile_id}: no matching variants")
-                continue
-
             hints = profile.get("printify_blueprint_hints")
             if not isinstance(hints, dict):
                 hints = {}
@@ -496,28 +509,43 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
             hints["blueprint_id"] = int(best_bp["id"])
             hints["provider_id"] = int(best_provider["id"])
 
+            meta = profile.get("full_catalog_metadata")
+            if not isinstance(meta, dict):
+                meta = {}
+                profile["full_catalog_metadata"] = meta
+            matched_ids = [int(v.get("id")) for v in matched_variants if isinstance(v.get("id"), int)]
+            meta["matched_variant_count"] = len(matched_ids)
+            meta["matched_variant_ids"] = matched_ids
+
             if write_variants:
-                meta = profile.get("full_catalog_metadata")
-                if not isinstance(meta, dict):
-                    meta = {}
-                    profile["full_catalog_metadata"] = meta
                 meta["printify_variant_ids"] = [v.get("id") for v in matched_variants if v.get("id") is not None]
 
-            changed_now = old_bp != hints["blueprint_id"] or old_provider != hints["provider_id"]
+            changed_now = (
+                old_bp != hints["blueprint_id"]
+                or old_provider != hints["provider_id"]
+                or meta.get("matched_variant_count") != len(matched_ids)
+            )
             if changed_now:
                 changed += 1
             _print(
-                f"[OK] {profile_id}: blueprint_id={hints['blueprint_id']} provider_id={hints['provider_id']} "
-                f"(matched_variants={matched_count})"
+                f"[OK] {profile_id}: blueprint chosen={hints['blueprint_id']} provider chosen={hints['provider_id']} "
+                f"matched_variant_count={len(matched_ids)}"
             )
+            if not matched_ids:
+                _print(
+                    f"[WARN] {profile_id}: blueprint/provider resolved but matched_variant_ids is empty; "
+                    "publish will be blocked until catalog rules are adjusted."
+                )
             _debug(
                 debug,
                 f"Profile {profile_id} final selection: blueprint_id={hints['blueprint_id']} provider_id={hints['provider_id']}",
             )
         except PrintifyRequestError:
             _print(f"[ERROR] {profile_id}: request failed")
+            failed_profiles += 1
         except Exception as exc:
             _print(f"[ERROR] {profile_id}: unexpected error: {exc}")
+            failed_profiles += 1
 
     try:
         _write_profiles(profiles_path, doc)
@@ -527,6 +555,9 @@ def run(write_variants: bool, debug: bool, debug_http: bool, max_blueprints_per_
         return 1
 
     _print(f"Updated {changed} profile(s) in {profiles_path}")
+    if failed_profiles:
+        _print(f"[ERROR] Resolver completed with failures for {failed_profiles} profile(s)")
+        return 1
     return 0
 
 
