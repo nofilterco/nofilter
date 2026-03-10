@@ -154,6 +154,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
         "shopify_sync_status": r.get("shopify_sync_status", ""),
         "manual_setup_required": r.get("needs_manual_personalization_setup", "NO"),
         "printify_product_id": r["printify_product_id"], "shopify_product_id": r["shopify_product_id"],
+        "error_stage": r.get("error_stage", ""), "error_message": r.get("error_message", ""), "last_publish_response": r.get("last_publish_response", ""),
     } for r in rows]
     Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
@@ -161,7 +162,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "featured_flag", "merchandising_priority", "in_stock_only", "show_all_variants", "error_stage", "error_message", "last_publish_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

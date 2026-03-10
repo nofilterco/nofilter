@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,7 +13,7 @@ from catalog_assets import build_placeholder_asset, build_storefront_preview_set
 from catalog_builders import build_description_html, build_seo_title, build_tags_csv, build_title
 from catalog_config import catalog_indexes, load_catalog
 from catalog_queue import append_rows, dump_launch_report, dump_manual_setup_only_csv, dump_ops_review_csv, load_rows, next_id, save_rows
-from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants
+from publish_product import publish_listing, recheck_sync_for_row, resolve_profile, resolve_variants, validate_printify_shop_access
 from setup_packet import generate_setup_packet
 from status_model import derive_launch_status, normalize_publish_status, normalize_sync_status
 
@@ -227,35 +228,63 @@ def export_row_json(row_id: str, out_dir: str = "out") -> str:
     return str(path)
 
 
-def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "") -> int:
-    rows = load_rows(); idx = catalog_indexes(load_catalog()); count = 0
+def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "", debug_slug: str = "", verbose_debug: bool = False) -> int:
+    rows = load_rows(); idx = catalog_indexes(load_catalog()); count = 0; published = 0
+    shop_id = os.getenv("PRINTIFY_SHOP_ID", "").strip()
+    shop_valid = True
+    shop_error = ""
+    if not dry_run and shop_id:
+        try:
+            shop_valid, shop_error = validate_printify_shop_access(shop_id)
+        except Exception as exc:
+            shop_valid = False
+            shop_error = f"Unable to validate Printify shop access: {exc}"
+
     for row in rows:
         if row["status"] != "APPROVED": continue
+        if debug_slug and row.get("listing_slug") != debug_slug: continue
         profile = idx["profiles"].get(row.get("product_profile_id", ""), {})
         resolve_profile(row, profile); resolve_variants(row, profile)
         try:
-            if not json.loads(row.get("enabled_variant_ids_json") or "[]"):
-                row["enabled_variant_ids_json"] = "[1]"
-            publish_listing(row, dry_run=dry_run)
-            if dry_run:
-                row["pipeline_stage"] = "PUBLISH_DRY_RUN"
-            elif normalize_publish_status(row.get("printify_publish_status", "")) == "PUBLISHED_TO_PRINTIFY":
-                row["published_at"] = now_iso(); row["pipeline_stage"] = "PUBLISHED"; row["status"] = "PUBLISHED_TO_PRINTIFY"; row["launch_status"] = "PUBLISHED_TO_PRINTIFY"; row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
-                if row.get("shopify_sync_status") == "SYNCED_TO_SHOPIFY": row["status"] = "SYNCED_TO_SHOPIFY"; row["launch_status"] = "SYNCED_TO_SHOPIFY"
-                elif row.get("shopify_sync_status") == "SYNC_PENDING": row["launch_status"] = "SYNC_PENDING"
-                elif row.get("shopify_sync_status") == "SYNC_FAILED": row["launch_status"] = "SYNC_FAILED"; row["status"] = "SYNC_FAILED"
-                if row.get("needs_manual_personalization_setup") == "YES" and row.get("status") != "SYNCED_TO_SHOPIFY": row["launch_status"] = "MANUAL_PERSONALIZATION_REQUIRED"
+            if row.get("launch_status") == "BLOCKED_PROFILE" or row.get("status") == "BLOCKED_PROFILE":
+                row["status"] = "BLOCKED_PROFILE"; row["launch_status"] = "BLOCKED_PROFILE"
+            elif not json.loads(row.get("enabled_variant_ids_json") or "[]"):
+                row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"
+                row["printify_publish_status"] = "PUBLISH_FAILED"
+                row["error_stage"] = row.get("error_stage") or "PUBLISH"
+                row["error_message"] = row.get("error_message") or "No enabled variant ids resolved"
+            elif not dry_run and not shop_valid and row.get("product_family") != "tote":
+                row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"
+                row["printify_publish_status"] = "PUBLISH_FAILED"
+                row["error_stage"] = "PRINTIFY_CONFIG"
+                row["error_message"] = shop_error or "Printify shop preflight failed"
+                row["last_publish_response"] = json.dumps({"error": row["error_message"], "shop_id": shop_id}, ensure_ascii=False)
             else:
-                row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"; row["error_stage"] = row.get("error_stage") or "PUBLISH"
-                row["error_message"] = row.get("error_message") or "Create product succeeded without printify_product_id"
+                publish_listing(row, dry_run=dry_run, debug=verbose_debug or (debug_slug and row.get("listing_slug") == debug_slug))
+                if dry_run:
+                    row["pipeline_stage"] = "PUBLISH_DRY_RUN"
+                elif normalize_publish_status(row.get("printify_publish_status", "")) == "PUBLISHED_TO_PRINTIFY" and row.get("printify_product_id"):
+                    row["published_at"] = now_iso(); row["pipeline_stage"] = "PUBLISHED"; row["status"] = "PUBLISHED_TO_PRINTIFY"; row["launch_status"] = "PUBLISHED_TO_PRINTIFY"; row["printify_publish_status"] = "PUBLISHED_TO_PRINTIFY"
+                    if row.get("shopify_sync_status") == "SYNCED_TO_SHOPIFY": row["status"] = "SYNCED_TO_SHOPIFY"; row["launch_status"] = "SYNCED_TO_SHOPIFY"
+                    elif row.get("shopify_sync_status") == "SYNC_PENDING": row["launch_status"] = "SYNC_PENDING"
+                    elif row.get("shopify_sync_status") == "SYNC_FAILED": row["launch_status"] = "SYNC_FAILED"; row["status"] = "SYNC_FAILED"
+                    if row.get("needs_manual_personalization_setup") == "YES" and row.get("status") != "SYNCED_TO_SHOPIFY": row["launch_status"] = "MANUAL_PERSONALIZATION_REQUIRED"
+                else:
+                    row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"; row["error_stage"] = row.get("error_stage") or "PUBLISH"
+                    row["error_message"] = row.get("error_message") or "Create product failed or returned no printify_product_id"
         except Exception as exc:
-            row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"; row["error_stage"] = row.get("error_stage") or "PUBLISH"; row["error_message"] = str(exc)
+            row["pipeline_stage"] = "PUBLISH_FAILED"; row["status"] = "PUBLISH_FAILED"; row["launch_status"] = "PUBLISH_FAILED"; row["printify_publish_status"] = "PUBLISH_FAILED"; row["error_stage"] = row.get("error_stage") or "PUBLISH"; row["error_message"] = str(exc)
+        if debug_title and row.get("title") == debug_title:
+            print(f"DEBUG_PAYLOAD[{debug_title}]={row.get('_last_printify_payload', '{}')}")
         _append_publish_log(row, "PUBLISH_ATTEMPT", row.get("printify_publish_status", ""))
         count += 1
+        if normalize_publish_status(row.get("printify_publish_status", "")) == "PUBLISHED_TO_PRINTIFY" and row.get("printify_product_id"):
+            published += 1
         if limit and count >= limit: break
+
     for row in rows:
         _normalize_row_statuses(row)
-    save_rows(rows); return count
+    save_rows(rows); return published
 
 
 def main() -> None:
@@ -266,12 +295,14 @@ def main() -> None:
     p.add_argument("--publish-approved", action="store_true"); p.add_argument("--recheck-sync", action="store_true")
     p.add_argument("--setup-packets", action="store_true"); p.add_argument("--export-manual-setup-only", action="store_true")
     p.add_argument("--dry-run", action="store_true"); p.add_argument("--debug-payload-title", default="")
+    p.add_argument("--publish-slug", default="", help="Publish only one approved listing slug")
+    p.add_argument("--publish-debug", action="store_true", help="Verbose publish diagnostics")
     p.add_argument("--export-report", action="store_true"); args = p.parse_args()
     if args.seed_launch: print(f"seeded={seed_listings(True, args.collection, args.family)}")
     if args.build_assets: print(f"assets={build_assets_for_rows()}")
     if args.approve_all: print(f"approved={mark_review('APPROVED')}")
     if args.reject_all: print(f"rejected={mark_review('REJECTED')}")
-    if args.publish_approved: print(f"published={publish_approved(dry_run=args.dry_run, debug_title=args.debug_payload_title)}")
+    if args.publish_approved: print(f"published={publish_approved(dry_run=args.dry_run, debug_title=args.debug_payload_title, debug_slug=args.publish_slug, verbose_debug=args.publish_debug)}")
     if args.recheck_sync: print(f"sync_checked={recheck_sync()}")
     if args.setup_packets: print(f"setup_packets={generate_setup_packets()}")
     if args.export_manual_setup_only: print(f"manual_setup_export={dump_manual_setup_only_csv()}")
