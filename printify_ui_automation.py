@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -132,6 +133,110 @@ def _publish_button_probe(page: Any) -> dict[str, Any]:
         ],
         required=True,
     )
+
+
+def _auth_probe(page: Any) -> dict[str, Any]:
+    final_url = ""
+    try:
+        final_url = str(page.url or "")
+    except Exception:
+        final_url = ""
+
+    url_lower = final_url.lower()
+    if any(token in url_lower for token in ("/login", "signin", "auth", "oauth")):
+        return {"matched": True, "reason": "url_login_pattern", "final_url": final_url}
+
+    login_probe = _selector_probe(
+        page,
+        "auth_gate",
+        [
+            {"name": "email_input", "locator": lambda p: p.locator('input[type="email"]').first},
+            {"name": "password_input", "locator": lambda p: p.locator('input[type="password"]').first},
+            {"name": "sign_in_text", "locator": lambda p: p.get_by_text("Sign in", exact=False).first},
+            {"name": "log_in_text", "locator": lambda p: p.get_by_text("Log in", exact=False).first},
+        ],
+    )
+    return {
+        "matched": bool(login_probe.get("matched")),
+        "reason": "selector_login_pattern" if login_probe.get("matched") else "not_detected",
+        "final_url": final_url,
+        "attempts": login_probe.get("attempts", []),
+    }
+
+
+def _page_readiness_probe(page: Any, *, timeout_ms: int) -> dict[str, Any]:
+    wait_started = time.monotonic()
+    deadline = wait_started + max(timeout_ms, 1000) / 1000
+    poll_s = 0.25
+
+    loading_ui_selector = ".loading, .spinner, [data-testid*='loading'], [aria-busy='true']"
+    product_anchor_probe = {
+        "name": "product_anchor",
+        "matched": False,
+        "selected_strategy": None,
+        "attempts": [],
+    }
+    network_idle = False
+    loading_text_present = True
+    loading_ui_present = True
+    auth = {"matched": False, "reason": "not_detected", "final_url": "", "attempts": []}
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 4000))
+        network_idle = True
+    except Exception:
+        network_idle = False
+
+    while time.monotonic() < deadline:
+        auth = _auth_probe(page)
+        if auth.get("matched"):
+            break
+
+        try:
+            body_text = (page.locator("body").inner_text(timeout=1000) or "").lower()
+        except Exception:
+            body_text = ""
+        loading_text_present = "loading..." in body_text or body_text.strip() == "loading"
+
+        try:
+            loading_ui_present = _safe_count(page.locator(loading_ui_selector)) > 0
+        except Exception:
+            loading_ui_present = True
+
+        product_anchor_probe = _selector_probe(
+            page,
+            "product_page_anchor",
+            [
+                {"name": "publishing_settings", "locator": lambda p: p.get_by_text("Publishing settings", exact=False).first},
+                {"name": "personalization", "locator": lambda p: p.locator("text=/Personalization/i").first},
+                {"name": "pricing", "locator": lambda p: p.locator("text=/Pricing/i").first},
+                {"name": "shipping", "locator": lambda p: p.locator("text=/Shipping/i").first},
+                {"name": "mockups_or_views", "locator": lambda p: p.locator("text=/Mockups|Views/i").first},
+            ],
+        )
+        if product_anchor_probe.get("matched"):
+            break
+
+        page.wait_for_timeout(int(poll_s * 1000))
+
+    waited_ms = int((time.monotonic() - wait_started) * 1000)
+    final_url = str(page.url or "")
+    ready = bool(product_anchor_probe.get("matched")) and not auth.get("matched")
+
+    return {
+        "final_url": final_url,
+        "network_idle_reached": network_idle,
+        "loading_text_present": loading_text_present,
+        "loading_ui_present": loading_ui_present,
+        "auth_redirect_detected": bool(auth.get("matched")),
+        "auth_detection_reason": auth.get("reason"),
+        "auth_attempts": auth.get("attempts", []),
+        "first_anchor_match": product_anchor_probe.get("selected_strategy"),
+        "anchor_probe_attempts": product_anchor_probe.get("attempts", []),
+        "ready_for_probing": ready,
+        "waited_ms": waited_ms,
+        "timed_out": waited_ms >= timeout_ms and not ready and not auth.get("matched"),
+    }
 
 
 @dataclass
@@ -342,6 +447,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
             action_log: list[dict[str, Any]] = []
             screenshot_paths: list[str] = []
             selector_diagnostics: dict[str, Any] = {}
+            readiness_diagnostics: dict[str, Any] = {}
             status = "skipped"
             result = "no_actions"
             diag = ""
@@ -359,6 +465,29 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     page.goto(product_url, wait_until="domcontentloaded", timeout=args.timeout_ms)
                     page.screenshot(path=str(before), full_page=True)
                     screenshot_paths.append(str(before))
+
+                    readiness_diagnostics = _page_readiness_probe(page, timeout_ms=args.readiness_timeout_ms)
+                    selector_diagnostics["readiness"] = readiness_diagnostics
+                    action_log.append({"ts": now_iso(), "step": "readiness_probe", "detail": readiness_diagnostics})
+
+                    if args.pause_after_open and not args.headless:
+                        _wait_for_enter(
+                            f"Paused after open for {t.listing_slug}. URL={readiness_diagnostics.get('final_url')}. Press Enter to continue..."
+                        )
+
+                    if readiness_diagnostics.get("auth_redirect_detected"):
+                        status = "auth_required"
+                        result = "auth_required"
+                        diag = "redirected_to_login" if readiness_diagnostics.get("final_url") else "auth_required"
+                        action_log.append({"ts": now_iso(), "step": "auth_required", "detail": readiness_diagnostics})
+                        raise RuntimeError("auth_required")
+
+                    if not readiness_diagnostics.get("ready_for_probing"):
+                        status = "failed"
+                        result = "page_not_ready"
+                        diag = "page_still_loading_or_missing_anchor"
+                        action_log.append({"ts": now_iso(), "step": "page_not_ready", "detail": readiness_diagnostics})
+                        raise RuntimeError("page_not_ready")
 
                     personalization_toggle_probe = _personalization_toggle_probe(page)
                     publish_area_probe = _publish_area_probe(page)
@@ -474,10 +603,11 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 action_log.append({"ts": now_iso(), "step": "selector_no_match", "detail": {"selector": exc.key, "attempts": exc.attempts}})
 
             except Exception as exc:
-                status = "failed"
-                result = "selector_or_runtime_failure"
-                diag = str(exc)
-                action_log.append({"ts": now_iso(), "step": "error", "detail": diag})
+                if str(exc) not in {"auth_required", "page_not_ready"}:
+                    status = "failed"
+                    result = "selector_or_runtime_failure"
+                    diag = str(exc)
+                    action_log.append({"ts": now_iso(), "step": "error", "detail": diag})
 
             row_record = {
                 "id": t.row_id,
@@ -490,6 +620,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                 "ui_automation_last_result": result if not diag else f"{result}: {diag}",
                 "ui_automation_screenshot_paths": screenshot_paths,
                 "selector_diagnostics": selector_diagnostics,
+                "readiness_diagnostics": readiness_diagnostics or selector_diagnostics.get("readiness", {}),
                 "action_log": action_log,
             }
             report_rows.append(row_record)
@@ -556,6 +687,8 @@ def main() -> None:
     p.add_argument("--confirm-each", action="store_true")
     p.add_argument("--storage-state", default="")
     p.add_argument("--timeout-ms", type=int, default=15000)
+    p.add_argument("--readiness-timeout-ms", type=int, default=30000)
+    p.add_argument("--pause-after-open", action="store_true")
     p.add_argument("--limit", type=int, default=0)
     args = p.parse_args()
 
