@@ -13,7 +13,10 @@ QUEUE_PATH = Path("queue.csv")
 NEW_SCHEMA = [
     "id","status","pipeline_stage","store_brand","collection_slug","collection_title","shopify_collection_tag","listing_slug","listing_title","listing_template_id","template_family","product_profile_id","product_family","publish_mode","personalization_mode","personalization_fields_json","text_fields_json","image_upload_fields_json","logo_upload_fields_json","buyer_personalization_schema_json","internal_workflow_metadata_json","personalization_instructions","title","seo_title","description_html","tags_csv","shopify_tags_csv","shopify_product_type","placeholder_art_mode","placeholder_art_text","printify_blueprint_id","printify_provider_id","variant_strategy","show_all_variants","in_stock_only","enabled_variant_ids_json","enabled_sizes_json","enabled_colors_json","price_cents","asset_local_path","asset_r2_url","mockup_local_path","mockup_r2_url","printify_image_id","printify_product_id","shopify_product_id","shopify_handle","shopify_sales_channel_collections","approved_at","published_at","error_stage","error_message","debug_trace","needs_manual_personalization_setup","printify_publish_status","shopify_sync_status","launch_status","last_publish_response","last_sync_response","last_sync_check_at","printify_publish_error","publish_log_history_json",
     "preview_style","style_variant","preview_artifacts_json","manual_setup_packet_path","manual_setup_packet_json","manual_setup_status","featured_flag","merchandising_priority",
-    "profile_resolved","blueprint_id","provider_id","matched_variant_count","enabled_variant_count_before_filter","enabled_variant_count_after_filter","customer_editable_summary","publish_retry_eligible","publish_attempt_count"
+    "profile_resolved","blueprint_id","provider_id","matched_variant_count","enabled_variant_count_before_filter","enabled_variant_count_after_filter","customer_editable_summary",
+    "customizable_badge_text","personalization_cta","editable_fields_summary","supports_photo_upload","supports_logo_upload","supports_text_edit",
+    "storefront_personalization_headline","storefront_personalization_subtext","storefront_badges",
+    "publish_retry_eligible","publish_attempt_count"
 ]
 
 
@@ -67,6 +70,44 @@ def _write(rows: list[dict[str, Any]]) -> None:
         w.writeheader()
         for row in rows:
             w.writerow({k: row.get(k, "") for k in NEW_SCHEMA})
+
+
+def _safe_json_list(value: str) -> list[Any]:
+    try:
+        parsed = json.loads(value or "[]")
+        return parsed if isinstance(parsed, list) else []
+    except Exception:
+        return []
+
+
+def _derive_storefront_personalization(row: dict[str, str]) -> dict[str, str]:
+    text_fields = _safe_json_list(row.get("text_fields_json") or row.get("personalization_fields_json") or "[]")
+    image_fields = _safe_json_list(row.get("image_upload_fields_json") or "[]")
+    logo_fields = _safe_json_list(row.get("logo_upload_fields_json") or "[]")
+    summary = row.get("customer_editable_summary") or f"Text: {len(text_fields)} fields | Image uploads: {len(image_fields)} | Logo uploads: {len(logo_fields)}"
+
+    badges: list[str] = []
+    if text_fields:
+        badges.append("Custom Text")
+    if image_fields:
+        badges.append("Photo Upload")
+    if logo_fields:
+        badges.append("Logo Upload")
+
+    return {
+        "customer_editable_summary": summary,
+        "editable_fields_summary": row.get("editable_fields_summary") or summary,
+        "supports_text_edit": row.get("supports_text_edit") or ("YES" if text_fields else "NO"),
+        "supports_photo_upload": row.get("supports_photo_upload") or ("YES" if image_fields else "NO"),
+        "supports_logo_upload": row.get("supports_logo_upload") or ("YES" if logo_fields else "NO"),
+        "customizable_badge_text": row.get("customizable_badge_text") or ("Personalizable" if badges else "Ready to Order"),
+        "personalization_cta": row.get("personalization_cta") or ("Customize with your details" if badges else "Choose your options"),
+        "storefront_personalization_headline": row.get("storefront_personalization_headline") or ("Make it yours" if badges else "Made for gifting"),
+        "storefront_personalization_subtext": row.get("storefront_personalization_subtext") or (
+            "Add your name, date, photo, or logo before checkout" if badges else "Thoughtful design for special moments"
+        ),
+        "storefront_badges": row.get("storefront_badges") or ", ".join(badges),
+    }
 
 
 def load_rows() -> list[dict[str, str]]:
@@ -161,7 +202,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
         "printify_publish_status": r.get("printify_publish_status", ""),
         "shopify_sync_status": r.get("shopify_sync_status", ""),
         "manual_setup_required": r.get("needs_manual_personalization_setup", "NO"),
-        "customer_editable_summary": r.get("customer_editable_summary") or f"Text: {len(json.loads(r.get('text_fields_json') or "[]"))} fields | Image uploads: {len(json.loads(r.get('image_upload_fields_json') or "[]"))} | Logo uploads: {len(json.loads(r.get('logo_upload_fields_json') or "[]"))}",
+        **_derive_storefront_personalization(r),
         "publish_retry_eligible": r.get("publish_retry_eligible", ""),
         "publish_attempt_count": r.get("publish_attempt_count", ""),
         "printify_product_id": r["printify_product_id"], "shopify_product_id": r["shopify_product_id"],
@@ -177,7 +218,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -188,14 +229,14 @@ def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_in
             enriched["storefront_preview_style"] = r.get("preview_style", "")
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
             enriched["stock_mode"] = "in_stock_only" if (r.get("in_stock_only") == "YES") else "all_variants"
-            enriched["customer_editable_summary"] = r.get("customer_editable_summary") or f"Text: {len(json.loads(r.get('text_fields_json') or "[]"))} fields | Image uploads: {len(json.loads(r.get('image_upload_fields_json') or "[]"))} | Logo uploads: {len(json.loads(r.get('logo_upload_fields_json') or "[]"))}"
+            enriched.update(_derive_storefront_personalization(r))
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path
 
 
 def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
     rows = [r for r in load_rows() if r.get("needs_manual_personalization_setup") == "YES"]
-    fieldnames = ["id", "listing_slug", "title", "product_family", "status", "launch_status", "manual_setup_status", "manual_setup_packet_path"]
+    fieldnames = ["id", "listing_slug", "title", "product_family", "status", "launch_status", "manual_setup_status", "manual_setup_packet_path", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()
@@ -205,5 +246,6 @@ def dump_manual_setup_only_csv(path: str = "manual_setup_required.csv") -> str:
             enriched["preview_style"] = r.get("preview_style", "")
             enriched["storefront_preview_style"] = r.get("preview_style", "")
             enriched["style_variant"] = r.get("style_variant") or style_variant_for_listing(r.get("listing_slug", ""), r.get("template_family", ""))
+            enriched.update(_derive_storefront_personalization(r))
             w.writerow({k: enriched.get(k, "") for k in fieldnames})
     return path

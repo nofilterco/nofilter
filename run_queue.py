@@ -43,6 +43,38 @@ def _buyer_schema_for_listing(item: dict[str, Any], tpl: dict[str, Any], placeho
         "customer_can_edit_summary": f"Text: {len(text_fields)} fields | Image uploads: {len(image_fields)} | Logo uploads: {len(logo_fields)}",
     }
 
+def _storefront_personalization_metadata(row: dict[str, Any], buyer_schema: dict[str, Any] | None = None) -> dict[str, str]:
+    schema = buyer_schema or json.loads(row.get("buyer_personalization_schema_json") or "{}")
+    text_fields = schema.get("text_fields") if isinstance(schema.get("text_fields"), list) else json.loads(row.get("text_fields_json") or row.get("personalization_fields_json") or "[]")
+    image_fields = schema.get("image_fields") if isinstance(schema.get("image_fields"), list) else json.loads(row.get("image_upload_fields_json") or "[]")
+    logo_fields = schema.get("logo_fields") if isinstance(schema.get("logo_fields"), list) else json.loads(row.get("logo_upload_fields_json") or "[]")
+
+    labels = []
+    for f in [*text_fields, *image_fields, *logo_fields]:
+        if isinstance(f, dict):
+            labels.append(f.get("field_label") or f.get("label") or f.get("field_key") or "Custom field")
+    badges = []
+    if text_fields:
+        badges.append("Custom Text")
+    if image_fields:
+        badges.append("Photo Upload")
+    if logo_fields:
+        badges.append("Logo Upload")
+    summary = row.get("customer_editable_summary") or schema.get("customer_can_edit_summary") or f"Text: {len(text_fields)} fields | Image uploads: {len(image_fields)} | Logo uploads: {len(logo_fields)}"
+
+    return {
+        "customer_editable_summary": summary,
+        "editable_fields_summary": ", ".join(labels) if labels else summary,
+        "supports_text_edit": "YES" if text_fields else "NO",
+        "supports_photo_upload": "YES" if image_fields else "NO",
+        "supports_logo_upload": "YES" if logo_fields else "NO",
+        "customizable_badge_text": "Personalizable" if badges else "Ready to Order",
+        "personalization_cta": "Customize with your name" if text_fields else "Choose options",
+        "storefront_personalization_headline": "Make it yours" if badges else "Made for gifting",
+        "storefront_personalization_subtext": "Add your name, date, photo, or logo before checkout" if badges else "Crafted keepsake for special occasions",
+        "storefront_badges": ", ".join(badges),
+    }
+
 
 def _apply_merch(row: dict[str, Any], coll: dict[str, Any]) -> None:
     featured = set(coll.get("featured_listing_slugs", []))
@@ -127,6 +159,7 @@ def seed_listings(from_launch_plan: bool = True, collection: str = "", family: s
             "publish_log_history_json": json.dumps([{"ts": now_iso(), "event": "SEEDED", "detail": slug}]), "debug_trace": f"{now_iso()}:seeded",
             "customer_editable_summary": buyer_schema.get("customer_can_edit_summary", ""), "publish_retry_eligible": "NO", "publish_attempt_count": "0",
         })
+        row.update(_storefront_personalization_metadata(row, buyer_schema))
         _apply_merch(row, coll)
         resolve_profile(row, profile)
         if row.get("launch_status") == "BLOCKED_PROFILE":
@@ -186,6 +219,7 @@ def generate_setup_packets(ids: list[str] | None = None) -> int:
             _append_publish_log(row, "SETUP_PACKET_DEFERRED", "blocked profile")
             continue
         row["needs_manual_personalization_setup"] = "YES"
+        row.update(_storefront_personalization_metadata(row))
         packet = generate_setup_packet(row)
         row["manual_setup_packet_path"] = packet["path"]
         row["manual_setup_packet_json"] = json.dumps(packet["packet"])

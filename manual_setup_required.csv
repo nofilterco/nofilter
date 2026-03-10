@@ -1,10 +1,1 @@
-id,listing_slug,title,product_family,status,launch_status,manual_setup_status,manual_setup_packet_path
-7,bridesmaid-name-role-personalized-tee,Bridesmaid Name & Role Personalized T-Shirt,tee,PUBLISH_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_bridesmaid-name-role-personalized-tee.json
-8,maid-of-honor-personalized-tee,Maid of Honor Personalized T-Shirt,tee,SYNC_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_maid-of-honor-personalized-tee.json
-9,bride-crew-custom-hoodie,Bride Crew Custom Hoodie,hoodie,PUBLISH_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_bride-crew-custom-hoodie.json
-10,groom-crew-custom-hoodie,Groom Crew Custom Hoodie,hoodie,SYNC_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_groom-crew-custom-hoodie.json
-11,bach-weekend-personalized-tee,Bach Weekend Personalized T-Shirt,tee,SYNC_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_bach-weekend-personalized-tee.json
-12,bridal-party-canvas-tote-bag,Bridal Party Canvas Tote Bag,tote,BLOCKED_PROFILE,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_bridal-party-canvas-tote-bag.json
-13,family-reunion-personalized-tee,Family Reunion Personalized T-Shirt,tee,SYNC_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_family-reunion-personalized-tee.json
-14,cousin-crew-reunion-hoodie,Cousin Crew Reunion Hoodie,hoodie,SYNC_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_cousin-crew-reunion-hoodie.json
-15,family-name-reunion-color-mug,Family Name Reunion Color Mug,mug,PUBLISH_FAILED,MANUAL_PERSONALIZATION_REQUIRED,generated,out/setup_packets/setup_packet_family-name-reunion-color-mug.json
+id,listing_slug,title,product_family,status,launch_status,manual_setup_status,manual_setup_packet_path,customizable_badge_text,personalization_cta,editable_fields_summary,supports_photo_upload,supports_logo_upload,supports_text_edit,storefront_personalization_headline,storefront_personalization_subtext,storefront_badges
