@@ -381,7 +381,7 @@ def _target_diagnostics(target: AutomationTarget) -> dict[str, str]:
         "target_row_id": target.row_id,
         "target_listing_slug": target.listing_slug,
         "resolved_printify_product_id": product_id,
-        "target_product_url": f"https://printify.com/app/store/products/{product_id}" if product_id else "",
+        "target_product_url": f"https://printify.com/app/product-details/{product_id}?fromProductsPage=1" if product_id else "",
     }
 
 
