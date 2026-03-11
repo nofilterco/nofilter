@@ -375,6 +375,50 @@ def _resolve_targets(
     return out
 
 
+def _parse_product_id_from_url(url: str) -> str:
+    text = (url or "").strip()
+    marker = "/app/product-details/"
+    if marker not in text:
+        return ""
+    tail = text.split(marker, 1)[1]
+    return tail.split("?", 1)[0].split("/", 1)[0].strip()
+
+
+def _resolve_direct_target(args: argparse.Namespace) -> AutomationTarget | None:
+    product_url = (getattr(args, "product_url", "") or "").strip()
+    direct_product_id = (getattr(args, "printify_product_id", "") or "").strip()
+
+    resolved_id = ""
+    if product_url:
+        resolved_id = _parse_product_id_from_url(product_url)
+    if not resolved_id and direct_product_id:
+        resolved_id = direct_product_id
+
+    if not (product_url or direct_product_id):
+        return None
+
+    listing_slug = (next(iter(args.listing_slug), "") if getattr(args, "listing_slug", None) else "").strip()
+    row_id = (next(iter(args.row_id), "") if getattr(args, "row_id", None) else "").strip()
+    listing_title = (getattr(args, "title", "") or "").strip()
+
+    return AutomationTarget(
+        row_id=row_id,
+        listing_slug=listing_slug,
+        listing_title=listing_title,
+        printify_product_id=resolved_id,
+        should_enable_personalization=False,
+        personalization_toggle_manual_required=False,
+        printify_personalize_button_required=False,
+        editable_fields_summary="",
+        supports_text_edit=False,
+        supports_photo_upload=False,
+        supports_logo_upload=False,
+        variant_visibility_recommended="",
+        sync_details_recommended=[],
+        packet_path="",
+    )
+
+
 def _target_diagnostics(target: AutomationTarget) -> dict[str, str]:
     product_id = (target.printify_product_id or "").strip()
     return {
@@ -462,15 +506,21 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
     checklist = _load_checklist_rows(args.checklist_csv)
     targets: list[AutomationTarget] = []
     if not args.bootstrap_login:
-        targets = _resolve_targets(
-            rows,
-            checklist,
-            listing_slugs=set(args.listing_slug or []),
-            row_ids=set(args.row_id or []),
-            manual_required_synced_only=args.manual_required_synced_only,
-        )
+        direct_target = _resolve_direct_target(args)
+        if direct_target is not None:
+            targets = [direct_target]
+        else:
+            targets = _resolve_targets(
+                rows,
+                checklist,
+                listing_slugs=set(args.listing_slug or []),
+                row_ids=set(args.row_id or []),
+                manual_required_synced_only=args.manual_required_synced_only,
+            )
         if not targets:
-            raise ValueError("No targets found. Provide --listing-slug / --row-id / --manual-required-synced-only.")
+            raise ValueError(
+                "No targets found. Provide --product-url / --printify-product-id / --listing-slug / --row-id / --manual-required-synced-only."
+            )
 
     output_root, shots_root = _ensure_out_dirs()
     theme_checklist_path = _write_shopify_theme_checklist(output_root)
@@ -834,6 +884,9 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Printify UI automation helper (Phase 8)")
+    p.add_argument("--product-url", default="", help="Direct Printify product URL (takes precedence over queue targeting)")
+    p.add_argument("--printify-product-id", default="", help="Direct Printify product id (used when --product-url is not set)")
+    p.add_argument("--title", default="", help="Optional listing title for direct-target logging")
     p.add_argument("--listing-slug", action="append", default=[])
     p.add_argument("--row-id", action="append", default=[])
     p.add_argument("--manual-required-synced-only", action="store_true")
