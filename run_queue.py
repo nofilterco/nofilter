@@ -181,7 +181,7 @@ def _normalize_row_statuses(row: dict[str, Any]) -> None:
 def seed_listings(from_launch_plan: bool = True, collection: str = "", family: str = "") -> int:
     catalog = load_catalog()
     idx = catalog_indexes(catalog)
-    source = catalog["launch_plan"] if from_launch_plan else catalog["listing_templates"]
+    source = catalog["launch_listings"] if from_launch_plan else catalog["listing_templates"]
     rows = load_rows()
     existing = {r.get("listing_slug") for r in rows}
     start = next_id(rows)

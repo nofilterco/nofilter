@@ -1,0 +1,9 @@
+diagnostic_dimensions:
+  - publish_attempt_count
+  - publish_last_error_code
+  - publish_last_error_message
+  - sync_last_checked_at
+  - sync_mismatch_fields
+  - provider_health_score
+  - personalization_setup_state
+  - ui_automation_fallback_used

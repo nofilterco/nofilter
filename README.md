@@ -1,6 +1,17 @@
-# Crafted Occasion Catalog Pipeline
+# Crafted Occasion Personalized Commerce OS
 
 This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for personalized apparel and gift products.
+
+
+## Architecture shift (2026)
+The repository now keeps the existing queue-first launch flow while introducing a broader OS structure for scaling personalized commerce safely:
+- `catalog/niches.yaml` for business intent clusters and niche priorities.
+- `catalog/template_families.yaml` for reusable template systems.
+- `catalog/personalization_fields.yaml` for field-level personalization rules.
+- `catalog/launch_batches.yaml` for launch wave orchestration.
+- `catalog/qa_scoring.yaml` + `catalog/publish_diagnostics.yaml` for confidence gates and diagnostics dimensions.
+
+See `ARCHITECTURE.md`, `OPERATIONS.md`, `PERSONALIZATION.md`, and `ROADMAP.md` for operating model details.
 
 ## What it does
 - Seeds listings from `catalog/launch_plan.yaml` into queue-first records.

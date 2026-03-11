@@ -1,0 +1,45 @@
+template_families:
+  - id: est_year_badge
+    design_archetype: badge
+    supported_niches: [family_milestones, new_baby_grandparent]
+    supported_product_families: [tee, hoodie, crewneck]
+    supported_personalization_levels: [level_1_text_only, level_2_text_plus_event_fields]
+    text_tokens: [role_label, established_year]
+    max_chars_by_token:
+      role_label: 18
+      established_year: 4
+    seo_landing_rule: include_role_plus_established_year
+
+  - id: script_name_stack
+    design_archetype: script_stack
+    supported_niches: [wedding_bridal_party, family_milestones]
+    supported_product_families: [tee, hoodie]
+    supported_personalization_levels: [level_1_text_only, level_2_text_plus_event_fields]
+    text_tokens: [name, role]
+    max_chars_by_token:
+      name: 16
+      role: 18
+    seo_landing_rule: include_event_plus_role
+
+  - id: retro_trip_stamp
+    design_archetype: retro_stamp
+    supported_niches: [reunion_trip_groups]
+    supported_product_families: [tee, mug]
+    supported_personalization_levels: [level_2_text_plus_event_fields]
+    text_tokens: [location, trip_year]
+    max_chars_by_token:
+      location: 24
+      trip_year: 4
+    seo_landing_rule: include_destination_plus_trip_year
+
+  - id: line_art_pet_memorial
+    design_archetype: line_art
+    supported_niches: [pet_parents_memorial]
+    supported_product_families: [tee, crewneck, mug]
+    supported_personalization_levels: [level_2_text_plus_event_fields, level_3_text_plus_photo]
+    text_tokens: [pet_name, memorial_year]
+    image_tokens: [pet_photo]
+    max_chars_by_token:
+      pet_name: 18
+      memorial_year: 4
+    seo_landing_rule: include_pet_memorial_phrase

@@ -1,0 +1,35 @@
+personalization_fields:
+  - id: name_short
+    input_type: text
+    min_chars: 1
+    max_chars: 18
+    safe_characters_regex: "^[A-Za-z0-9 '\\-]+$"
+    capitalization: title_case
+    emoji_allowed: false
+    approval_required: false
+
+  - id: established_year
+    input_type: date_year
+    min_chars: 4
+    max_chars: 4
+    safe_characters_regex: "^[0-9]{4}$"
+    normalization_rule: year_yyyy
+    approval_required: false
+
+  - id: role_label
+    input_type: text
+    min_chars: 2
+    max_chars: 18
+    safe_characters_regex: "^[A-Za-z0-9 '&\\-]+$"
+    capitalization: title_case
+    emoji_allowed: false
+    approval_required: false
+
+  - id: photo_upload
+    input_type: image
+    min_dpi: 150
+    min_width_px: 1200
+    min_height_px: 1200
+    accepted_formats: [jpg, jpeg, png]
+    transparency_allowed: true
+    approval_required: true

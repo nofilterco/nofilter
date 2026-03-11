@@ -1,0 +1,40 @@
+niches:
+  - id: family_milestones
+    intent_cluster: family milestones
+    emotional_driver: legacy_and_belonging
+    priority_tier: 1
+    hero_products: [tee, hoodie, crewneck]
+    personalization_levels_supported: [level_1_text_only, level_2_text_plus_event_fields]
+    launch_readiness: active
+
+  - id: wedding_bridal_party
+    intent_cluster: wedding / bridal party
+    emotional_driver: group_identity_and_event_pride
+    priority_tier: 1
+    hero_products: [tee, hoodie, mug]
+    personalization_levels_supported: [level_1_text_only, level_2_text_plus_event_fields]
+    launch_readiness: active
+
+  - id: reunion_trip_groups
+    intent_cluster: vacations / trips / reunions
+    emotional_driver: shared_memories
+    priority_tier: 1
+    hero_products: [tee, hoodie, mug]
+    personalization_levels_supported: [level_1_text_only, level_2_text_plus_event_fields, level_3_text_plus_photo]
+    launch_readiness: active
+
+  - id: pet_parents_memorial
+    intent_cluster: pet parents
+    emotional_driver: remembrance
+    priority_tier: 2
+    hero_products: [tee, crewneck, mug]
+    personalization_levels_supported: [level_1_text_only, level_2_text_plus_event_fields, level_3_text_plus_photo]
+    launch_readiness: planned
+
+  - id: new_baby_grandparent
+    intent_cluster: baby / new parent
+    emotional_driver: celebration_and_identity
+    priority_tier: 2
+    hero_products: [youth_tee, hoodie, crewneck]
+    personalization_levels_supported: [level_1_text_only, level_2_text_plus_event_fields]
+    launch_readiness: planned
