@@ -418,54 +418,56 @@ def _resolve_targets(
         if not (listing_slugs or row_ids or manual_required_synced_only):
             continue
 
-        checklist = checklist_rows.get(row.get("id", ""), {})
-        packet_path = row.get("manual_setup_packet_path") or checklist.get("manual_setup_packet_path") or ""
-        packet = _load_setup_packet(packet_path)
-        readiness = packet.get("personalization_hub_readiness") if isinstance(packet, dict) else {}
-        if not isinstance(readiness, dict):
-            readiness = {}
-
-        sync_raw = (
-            row.get("sync_details_recommended")
-            or checklist.get("sync_details_recommended")
-            or ",".join(packet.get("recommended_sync_detail_selections", []))
-        )
-
-        out.append(
-            AutomationTarget(
-                row_id=(row.get("id", "") or "").strip(),
-                listing_slug=(row.get("listing_slug", "") or "").strip(),
-                listing_title=(row.get("listing_title") or row.get("title") or checklist.get("title") or "").strip(),
-                printify_product_id=(row.get("printify_product_id") or checklist.get("printify_product_id") or "").strip(),
-                should_enable_personalization=_truthy(
-                    row.get("should_enable_personalization")
-                    or checklist.get("should_enable_personalization")
-                    or readiness.get("should_enable_personalization", "NO")
-                ),
-                personalization_toggle_manual_required=_truthy(
-                    row.get("personalization_toggle_manual_required")
-                    or checklist.get("personalization_toggle_manual_required")
-                    or readiness.get("personalization_toggle_manual_required", "NO")
-                ),
-                printify_personalize_button_required=_truthy(
-                    row.get("printify_personalize_button_required")
-                    or checklist.get("printify_personalize_button_required")
-                    or readiness.get("printify_personalize_button_required", "NO")
-                ),
-                editable_fields_summary=row.get("editable_fields_summary") or checklist.get("editable_fields_summary", ""),
-                supports_text_edit=_truthy(row.get("supports_text_edit") or checklist.get("supports_text_edit")),
-                supports_photo_upload=_truthy(row.get("supports_photo_upload") or checklist.get("supports_photo_upload")),
-                supports_logo_upload=_truthy(row.get("supports_logo_upload") or checklist.get("supports_logo_upload")),
-                variant_visibility_recommended=(
-                    row.get("variant_visibility_recommended")
-                    or checklist.get("variant_visibility_recommended")
-                    or packet.get("recommended_variant_visibility_setting", "")
-                ),
-                sync_details_recommended=_parse_sync_details(sync_raw),
-                packet_path=packet_path,
-            )
-        )
+        out.append(_build_target_from_row(row, checklist_rows))
     return out
+
+
+def _build_target_from_row(row: dict[str, str], checklist_rows: dict[str, dict[str, str]]) -> AutomationTarget:
+    checklist = checklist_rows.get(row.get("id", ""), {})
+    packet_path = row.get("manual_setup_packet_path") or checklist.get("manual_setup_packet_path") or ""
+    packet = _load_setup_packet(packet_path)
+    readiness = packet.get("personalization_hub_readiness") if isinstance(packet, dict) else {}
+    if not isinstance(readiness, dict):
+        readiness = {}
+
+    sync_raw = (
+        row.get("sync_details_recommended")
+        or checklist.get("sync_details_recommended")
+        or ",".join(packet.get("recommended_sync_detail_selections", []))
+    )
+
+    return AutomationTarget(
+        row_id=(row.get("id", "") or "").strip(),
+        listing_slug=(row.get("listing_slug", "") or "").strip(),
+        listing_title=(row.get("listing_title") or row.get("title") or checklist.get("title") or "").strip(),
+        printify_product_id=(row.get("printify_product_id") or checklist.get("printify_product_id") or "").strip(),
+        should_enable_personalization=_truthy(
+            row.get("should_enable_personalization")
+            or checklist.get("should_enable_personalization")
+            or readiness.get("should_enable_personalization", "NO")
+        ),
+        personalization_toggle_manual_required=_truthy(
+            row.get("personalization_toggle_manual_required")
+            or checklist.get("personalization_toggle_manual_required")
+            or readiness.get("personalization_toggle_manual_required", "NO")
+        ),
+        printify_personalize_button_required=_truthy(
+            row.get("printify_personalize_button_required")
+            or checklist.get("printify_personalize_button_required")
+            or readiness.get("printify_personalize_button_required", "NO")
+        ),
+        editable_fields_summary=row.get("editable_fields_summary") or checklist.get("editable_fields_summary", ""),
+        supports_text_edit=_truthy(row.get("supports_text_edit") or checklist.get("supports_text_edit")),
+        supports_photo_upload=_truthy(row.get("supports_photo_upload") or checklist.get("supports_photo_upload")),
+        supports_logo_upload=_truthy(row.get("supports_logo_upload") or checklist.get("supports_logo_upload")),
+        variant_visibility_recommended=(
+            row.get("variant_visibility_recommended")
+            or checklist.get("variant_visibility_recommended")
+            or packet.get("recommended_variant_visibility_setting", "")
+        ),
+        sync_details_recommended=_parse_sync_details(sync_raw),
+        packet_path=packet_path,
+    )
 
 
 def _parse_product_id_from_url(url: str) -> str:
@@ -477,7 +479,11 @@ def _parse_product_id_from_url(url: str) -> str:
     return tail.split("?", 1)[0].split("/", 1)[0].strip()
 
 
-def _resolve_direct_target(args: argparse.Namespace) -> AutomationTarget | None:
+def _resolve_direct_target(
+    args: argparse.Namespace,
+    rows: list[dict[str, str]],
+    checklist_rows: dict[str, dict[str, str]],
+) -> AutomationTarget | None:
     product_url = (getattr(args, "product_url", "") or "").strip()
     direct_product_id = (getattr(args, "printify_product_id", "") or "").strip()
 
@@ -494,20 +500,43 @@ def _resolve_direct_target(args: argparse.Namespace) -> AutomationTarget | None:
     row_id = (next(iter(args.row_id), "") if getattr(args, "row_id", None) else "").strip()
     listing_title = (getattr(args, "title", "") or "").strip()
 
+    matched_row = None
+    if row_id:
+        matched_row = next((r for r in rows if (r.get("id", "") or "").strip() == row_id), None)
+    if matched_row is None and listing_slug:
+        matched_row = next((r for r in rows if (r.get("listing_slug", "") or "").strip() == listing_slug), None)
+    if matched_row is not None:
+        target = _build_target_from_row(matched_row, checklist_rows)
+        if resolved_id:
+            target.printify_product_id = resolved_id
+        if listing_title:
+            target.listing_title = listing_title
+        return target
+
+    variant_visibility = (getattr(args, "variant_visibility", "") or "").strip() or "in_stock_only"
+    sync_details = _parse_sync_details(getattr(args, "sync_details", "")) or [
+        "product_title",
+        "description",
+        "mockups",
+        "colors_sizes_prices_skus",
+        "tags",
+        "shipping_profile",
+    ]
+
     return AutomationTarget(
         row_id=row_id,
         listing_slug=listing_slug,
         listing_title=listing_title,
         printify_product_id=resolved_id,
-        should_enable_personalization=False,
+        should_enable_personalization=bool(getattr(args, "enable_personalization", False)),
         personalization_toggle_manual_required=False,
         printify_personalize_button_required=False,
         editable_fields_summary="",
         supports_text_edit=False,
         supports_photo_upload=False,
         supports_logo_upload=False,
-        variant_visibility_recommended="",
-        sync_details_recommended=[],
+        variant_visibility_recommended=variant_visibility,
+        sync_details_recommended=sync_details,
         packet_path="",
     )
 
@@ -595,11 +624,17 @@ def _write_shopify_theme_checklist(path: Path) -> str:
 
 def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
     cdp_url = getattr(args, "cdp_url", "")
+    variant_visibility = (getattr(args, "variant_visibility", "") or "").strip()
+    if variant_visibility and variant_visibility != "in_stock_only":
+        raise ValueError("--variant-visibility currently supports only: in_stock_only")
+    product_url = (getattr(args, "product_url", "") or "").strip()
+    if product_url and not _parse_product_id_from_url(product_url):
+        raise ValueError("--product-url must include /app/product-details/<printify_product_id>")
     rows = load_rows()
     checklist = _load_checklist_rows(args.checklist_csv)
     targets: list[AutomationTarget] = []
     if not args.bootstrap_login:
-        direct_target = _resolve_direct_target(args)
+        direct_target = _resolve_direct_target(args, rows, checklist)
         if direct_target is not None:
             targets = [direct_target]
         else:
@@ -937,7 +972,13 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                         "shipping_profile",
                     }
                     missing_sync = sorted([k for k in required_sync if not sync_results.get(k)])
-                    all_required_confirmed = personalization_confirmed and variant_confirmed and not missing_sync
+                    failed_checks: list[str] = []
+                    if not personalization_confirmed:
+                        failed_checks.append("personalization")
+                    if not variant_confirmed:
+                        failed_checks.append("variant_visibility_in_stock_only")
+                    failed_checks.extend([f"sync::{key}" for key in missing_sync])
+                    all_required_confirmed = not failed_checks
 
                     if args.confirm_each and not args.headless:
                         _wait_for_enter(f"Review product {t.listing_slug} in browser; press Enter to continue...")
@@ -975,7 +1016,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                         after_state=publish_after,
                         success=bool(publish_btn_probe.get("matched")) and (publish_clicked or args.dry_run),
                         failure_reason=(
-                            f"required_settings_not_confirmed:{','.join(missing_sync)}"
+                            f"required_settings_not_confirmed:{','.join(failed_checks)}"
                             if (not all_required_confirmed and not args.dry_run)
                             else "publish_button_not_found"
                             if publish_btn is None
@@ -990,7 +1031,7 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
 
                     if not all_required_confirmed:
                         status = "failed"
-                        result = f"required_settings_unconfirmed:{','.join(missing_sync) or 'personalization_or_variant'}"
+                        result = f"required_settings_unconfirmed:{','.join(failed_checks)}"
                         raise RuntimeError(result)
 
                     after = shots_root / f"{run_id}_{t.listing_slug}_after.png"
@@ -1095,6 +1136,24 @@ def main() -> None:
     p.add_argument("--product-url", default="", help="Direct Printify product URL (takes precedence over queue targeting)")
     p.add_argument("--printify-product-id", default="", help="Direct Printify product id (used when --product-url is not set)")
     p.add_argument("--title", default="", help="Optional listing title for direct-target logging")
+    p.add_argument(
+        "--enable-personalization",
+        action="store_true",
+        help="Direct-mode default: enable personalization when no queue row metadata is available",
+    )
+    p.add_argument(
+        "--variant-visibility",
+        default="",
+        help="Direct-mode variant visibility override (recommended: in_stock_only)",
+    )
+    p.add_argument(
+        "--sync-details",
+        default="",
+        help=(
+            "Direct-mode sync details (comma-separated or JSON list), e.g. "
+            "product_title,description,mockups,colors_sizes_prices_skus,tags,shipping_profile"
+        ),
+    )
     p.add_argument("--listing-slug", action="append", default=[])
     p.add_argument("--row-id", action="append", default=[])
     p.add_argument("--manual-required-synced-only", action="store_true")
