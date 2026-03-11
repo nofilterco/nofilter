@@ -26,8 +26,30 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
 - **review**: use dashboard row actions for approve/reject or CLI `--approve-all` / `--reject-all`.
 - **publish**: `python run_queue.py --publish-approved`.
 - **recheck sync**: `python run_queue.py --recheck-sync`.
+- **config preflight (recommended before publish/UI runs)**: `python run_queue.py --validate-config`.
 - **manual personalization setup**: rows with `needs_manual_personalization_setup=YES` and `launch_status=MANUAL_PERSONALIZATION_REQUIRED` require Shopify personalization setup before launch.
 - **current launch scope**: bridal-party tees/hoodies and family-reunion tee/hoodie/mug are active; tote is excluded from seeding for now.
+
+## Real-world workflow (recommended)
+1. Preflight env + credentials:
+   - `python run_queue.py --validate-config`
+2. Seed and build:
+   - `python run_queue.py --seed-launch --collection family-reunion`
+   - `python run_queue.py --build-assets`
+3. Review/approve:
+   - Dashboard review actions, or `python run_queue.py --approve-all`
+4. Publish:
+   - `python run_queue.py --publish-approved`
+5. Recheck sync until stable:
+   - `python run_queue.py --recheck-sync`
+6. Generate setup artifacts for manual personalization and launch reporting:
+   - `python run_queue.py --setup-packets --export-manual-setup-only --export-report`
+
+### Recovery notes
+- If a row fails publish with a stale/deleted `printify_product_id`, the publisher now auto-detects stale IDs and recreates the product safely.
+- If you need to bulk reset stale-ID failures back to republishable rows:
+  - `python run_queue.py --clear-stale-printify-ids`
+  - then rerun: `python run_queue.py --retry-failed-publishes`
 
 ## Local helper scripts
 - `scripts/local_launch_test.sh` — safer end-to-end local launch test: loads `.env`, verifies Printify credentials, resolves/validates required profile IDs and variants, backs up `queue.csv` + `reports/` + `catalog/product_profiles.yaml` to `local_artifacts/`, reseeds the launch collections, builds assets, generates setup packets, approves/publishes all rows, rechecks sync, and exports report/manual setup outputs.

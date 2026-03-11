@@ -5,19 +5,17 @@ from typing import Any
 
 import requests
 
-SHOP_URL = os.getenv("SHOPIFY_STORE_URL", "")
-TOKEN = os.getenv("SHOPIFY_ADMIN_TOKEN", "")
-
-
 def _headers() -> dict[str, str]:
+    token = os.getenv("SHOPIFY_ADMIN_TOKEN", "")
     return {
-        "X-Shopify-Access-Token": TOKEN,
+        "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
     }
 
 
 def _base_url() -> str:
-    return f"https://{SHOP_URL}/admin/api/2024-01"
+    shop_url = os.getenv("SHOPIFY_STORE_URL", "")
+    return f"https://{shop_url}/admin/api/2024-01"
 
 
 def add_to_collection(product_id: int, collection_id: int) -> None:
@@ -27,7 +25,7 @@ def add_to_collection(product_id: int, collection_id: int) -> None:
 
 
 def find_product_id_by_title(title: str) -> str:
-    if not SHOP_URL or not TOKEN or not title:
+    if not os.getenv("SHOPIFY_STORE_URL", "") or not os.getenv("SHOPIFY_ADMIN_TOKEN", "") or not title:
         return ""
     url = f"{_base_url()}/products.json"
     params = {"title": title, "limit": 1, "fields": "id,title"}
@@ -43,7 +41,7 @@ def find_product_id_by_title(title: str) -> str:
 
 
 def find_product_by_handle(handle: str) -> dict[str, Any]:
-    if not SHOP_URL or not TOKEN or not handle:
+    if not os.getenv("SHOPIFY_STORE_URL", "") or not os.getenv("SHOPIFY_ADMIN_TOKEN", "") or not handle:
         return {}
     url = f"{_base_url()}/products.json"
     params = {"handle": handle, "limit": 1, "fields": "id,title,handle"}

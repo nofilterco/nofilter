@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -89,11 +91,20 @@ def migrate_if_needed() -> None:
 
 
 def _write(rows: list[dict[str, Any]]) -> None:
-    with QUEUE_PATH.open("w", encoding="utf-8", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=NEW_SCHEMA)
-        w.writeheader()
-        for row in rows:
-            w.writerow({k: row.get(k, "") for k in NEW_SCHEMA})
+    QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=f".{QUEUE_PATH.name}.", suffix=".tmp", dir=str(QUEUE_PATH.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=NEW_SCHEMA)
+            w.writeheader()
+            for row in rows:
+                w.writerow({k: row.get(k, "") for k in NEW_SCHEMA})
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, QUEUE_PATH)
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 def _safe_json_list(value: str) -> list[Any]:
@@ -284,7 +295,7 @@ def dump_launch_report(path: str = "launch_report.json", *, debug_include_invali
 
 def dump_ops_review_csv(path: str = "launch_ops_review.csv", *, debug_include_invalid: bool = False) -> str:
     rows = _operational_rows(debug_include_invalid)
-    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required", "variant_visibility_recommended", "shipping_profile_recommended", "shipping_mode_recommended", "sync_details_recommended", "collections_recommended", "should_enable_personalization", "personalization_toggle_manual_required", "personalize_button_theme_block_required", "requires_new_listing_for_personalization_if_already_published", "publish_retry_eligible", "publish_attempt_count", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
+    fieldnames = ["id", "collection_slug", "product_family", "template_family", "art_strategy_internal", "preview_style", "style_variant", "storefront_preview_style", "preview_artifacts_json", "title", "status", "launch_status", "printify_publish_status", "shopify_sync_status", "printify_product_id", "shopify_product_id", "needs_manual_personalization_setup", "manual_setup_status", "manual_setup_packet_path", "customer_editable_summary", "customizable_badge_text", "personalization_cta", "editable_fields_summary", "supports_photo_upload", "supports_logo_upload", "supports_text_edit", "storefront_personalization_headline", "storefront_personalization_subtext", "storefront_badges", "personalization_hub_ready", "requires_shopify_republish_for_personalization", "printify_personalize_button_required", "variant_visibility_recommended", "shipping_profile_recommended", "shipping_mode_recommended", "sync_details_recommended", "collections_recommended", "should_enable_personalization", "personalization_toggle_manual_required", "personalize_button_theme_block_required", "requires_new_listing_for_personalization_if_already_published", "publish_retry_eligible", "publish_attempt_count", "ui_automation_status", "ui_automation_last_run_at", "ui_automation_last_result", "featured_flag", "merchandising_priority", "stock_mode", "in_stock_only", "show_all_variants", "enabled_sizes_json", "enabled_colors_json", "profile_resolved", "blueprint_id", "provider_id", "matched_variant_count", "enabled_variant_count_before_filter", "enabled_variant_count_after_filter", "error_stage", "error_message", "printify_publish_error", "last_publish_response", "last_sync_response"]
     with Path(path).open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

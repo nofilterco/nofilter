@@ -389,6 +389,18 @@ def _sync_status_check(row: dict[str, str], shop_id: str) -> None:
     row["last_sync_response"] = json.dumps(_summarize_sync_payload(product, error_details), ensure_ascii=False)[:5000]
 
 
+def _validate_existing_printify_product_id(shop_id: str, product_id: str) -> tuple[bool, str]:
+    try:
+        get_product(shop_id, product_id)
+        return True, ""
+    except PrintifyAPIError as exc:
+        if exc.status_code == 404:
+            return False, f"stale_printify_product_id:{product_id}"
+        return False, f"printify_lookup_failed_status_{exc.status_code}"
+    except Exception as exc:
+        return False, f"printify_lookup_failed:{exc}"
+
+
 
 def recheck_sync_for_row(row: dict[str, str]) -> dict[str, str]:
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "").strip()
@@ -434,8 +446,22 @@ def publish_listing(row: dict[str, str], *, dry_run: bool = False, debug: bool =
     try:
         existing_product_id = (row.get("printify_product_id") or "").strip()
         if existing_product_id:
-            row["printify_product_id"] = existing_product_id
-            row["last_publish_response"] = json.dumps({"reused_printify_product_id": existing_product_id}, ensure_ascii=False)[:5000]
+            valid_existing, reason = _validate_existing_printify_product_id(shop_id, existing_product_id)
+            if valid_existing:
+                row["printify_product_id"] = existing_product_id
+                row["last_publish_response"] = json.dumps({"reused_printify_product_id": existing_product_id}, ensure_ascii=False)[:5000]
+            else:
+                row["printify_product_id"] = ""
+                row["last_publish_response"] = json.dumps(
+                    {
+                        "stale_printify_product_id": existing_product_id,
+                        "reason": reason,
+                        "action": "create_new_product",
+                    },
+                    ensure_ascii=False,
+                )[:5000]
+                created = create_product(shop_id, payload)
+                row["printify_product_id"] = str(created.get("id", ""))
         else:
             created = create_product(shop_id, payload)
             row["printify_product_id"] = str(created.get("id", ""))

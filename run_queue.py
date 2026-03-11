@@ -345,6 +345,42 @@ def export_row_json(row_id: str, out_dir: str = "out") -> str:
     return str(path)
 
 
+def validate_runtime_config(*, for_publish: bool = False, for_ui: bool = False) -> tuple[bool, list[str]]:
+    warnings: list[str] = []
+    required_token = os.getenv("PRINTIFY_TOKEN", "").strip()
+    if not required_token:
+        warnings.append("PRINTIFY_TOKEN missing (Printify API calls will fail).")
+    if for_publish and not os.getenv("PRINTIFY_SHOP_ID", "").strip():
+        warnings.append("PRINTIFY_SHOP_ID missing (publish will use mock mode only).")
+    if for_ui:
+        has_profile = bool(os.getenv("PLAYWRIGHT_BROWSERS_PATH", "").strip())
+        if not has_profile:
+            warnings.append("PLAYWRIGHT_BROWSERS_PATH not set (ensure Playwright browser availability in this environment).")
+    return len(warnings) == 0, warnings
+
+
+def clear_stale_printify_ids(ids: list[str] | None = None) -> int:
+    rows = load_rows()
+    updated = 0
+    for row in rows:
+        if ids and row.get("id") not in ids:
+            continue
+        if normalize_publish_status(row.get("printify_publish_status", "")) != "PUBLISH_FAILED":
+            continue
+        if "stale_printify_product_id" not in (row.get("last_publish_response", "") or ""):
+            continue
+        if row.get("printify_product_id"):
+            row["printify_product_id"] = ""
+            row["publish_retry_eligible"] = "YES"
+            row["status"] = "APPROVED"
+            row["launch_status"] = "APPROVED"
+            _append_publish_log(row, "STALE_PRINTIFY_PRODUCT_ID_CLEARED", "ready_for_republish")
+            updated += 1
+    if updated:
+        save_rows(rows)
+    return updated
+
+
 def publish_approved(limit: int = 0, *, dry_run: bool = False, debug_title: str = "", debug_slug: str = "", verbose_debug: bool = False, retry_publish_failures_only: bool = False) -> int:
     rows = load_rows(); idx = catalog_indexes(load_catalog()); count = 0; published = 0
     shop_id = os.getenv("PRINTIFY_SHOP_ID", "").strip()
@@ -428,6 +464,8 @@ def main() -> None:
     p.add_argument("--publish-slug", default="", help="Publish only one approved listing slug")
     p.add_argument("--publish-debug", action="store_true", help="Verbose publish diagnostics")
     p.add_argument("--export-report", action="store_true")
+    p.add_argument("--validate-config", action="store_true")
+    p.add_argument("--clear-stale-printify-ids", action="store_true", help="Reset stale printify_product_id rows back to APPROVED for safe republish")
     p.add_argument("--ui-automation", action="store_true")
     p.add_argument("--ui-listing-slug", action="append", default=[])
     p.add_argument("--ui-row-id", action="append", default=[])
@@ -452,6 +490,13 @@ def main() -> None:
     p.add_argument("--ui-pause-after-open", action="store_true")
     p.add_argument("--ui-limit", type=int, default=0)
     args = p.parse_args()
+    if args.validate_config:
+        ok, warnings = validate_runtime_config(for_publish=args.publish_approved or args.retry_failed_publishes, for_ui=args.ui_automation)
+        print(f"config_ok={ok}")
+        for w in warnings:
+            print(f"config_warning={w}")
+    if args.clear_stale_printify_ids:
+        print(f"cleared_stale_printify_ids={clear_stale_printify_ids()}")
     if args.seed_launch: print(f"seeded={seed_listings(True, args.collection, args.family)}")
     if args.build_assets: print(f"assets={build_assets_for_rows()}")
     if args.approve_all: print(f"approved={mark_review('APPROVED')}")
