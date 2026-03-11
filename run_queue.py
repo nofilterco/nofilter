@@ -431,6 +431,12 @@ def main() -> None:
     p.add_argument("--ui-automation", action="store_true")
     p.add_argument("--ui-listing-slug", action="append", default=[])
     p.add_argument("--ui-row-id", action="append", default=[])
+    p.add_argument("--ui-product-url", default="", help="Direct Printify product URL for UI automation")
+    p.add_argument("--ui-printify-product-id", default="", help="Direct Printify product id for UI automation")
+    p.add_argument("--ui-title", default="", help="Optional direct-target title label for UI reports")
+    p.add_argument("--ui-enable-personalization", action="store_true", help="Direct-mode default when no row/checklist metadata is available")
+    p.add_argument("--ui-variant-visibility", default="", help="Direct-mode variant visibility override, e.g. in_stock_only")
+    p.add_argument("--ui-sync-details", default="", help="Direct-mode sync details (CSV or JSON array)")
     p.add_argument("--ui-manual-required-synced-only", action="store_true")
     p.add_argument("--ui-screenshot-only", action="store_true")
     p.add_argument("--ui-plan-only", action="store_true")
@@ -442,6 +448,8 @@ def main() -> None:
     p.add_argument("--ui-cdp-url", default="")
     p.add_argument("--ui-bootstrap-login", action="store_true")
     p.add_argument("--ui-timeout-ms", type=int, default=15000)
+    p.add_argument("--ui-readiness-timeout-ms", type=int, default=30000)
+    p.add_argument("--ui-pause-after-open", action="store_true")
     p.add_argument("--ui-limit", type=int, default=0)
     args = p.parse_args()
     if args.seed_launch: print(f"seeded={seed_listings(True, args.collection, args.family)}")
@@ -456,6 +464,12 @@ def main() -> None:
     if args.export_report: print(f"report={dump_launch_report()} ops_csv={dump_ops_review_csv()} checklist_csv={dump_storefront_personalization_checklist_csv()}")
     if args.ui_automation:
         result = run_ui_automation(argparse.Namespace(
+            product_url=args.ui_product_url,
+            printify_product_id=args.ui_printify_product_id,
+            title=args.ui_title,
+            enable_personalization=args.ui_enable_personalization,
+            variant_visibility=args.ui_variant_visibility,
+            sync_details=args.ui_sync_details,
             listing_slug=args.ui_listing_slug,
             row_id=args.ui_row_id,
             manual_required_synced_only=args.ui_manual_required_synced_only,
@@ -471,9 +485,9 @@ def main() -> None:
             cdp_url=args.ui_cdp_url,
             bootstrap_login=args.ui_bootstrap_login,
             timeout_ms=args.ui_timeout_ms,
+            readiness_timeout_ms=args.ui_readiness_timeout_ms,
+            pause_after_open=args.ui_pause_after_open,
             limit=args.ui_limit,
-            readiness_timeout_ms=30000,
-            pause_after_open=False,
         ))
         print(f"ui_automation={json.dumps(result)}")
 

@@ -51,7 +51,13 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
   - Dry-run attach: `python run_queue.py --ui-automation --ui-row-id <id> --dry-run --ui-cdp-url http://localhost:9222`
   - Live attach: `python run_queue.py --ui-automation --ui-row-id <id> --ui-cdp-url http://localhost:9222`
 - Legacy state-file flow is still available via `--ui-storage-state`, but persistent profiles/CDP attach are recommended for Google sign-in reliability.
-- Explicit targeting remains required for real UI automation (`--ui-row-id`, `--ui-listing-slug`, or `--ui-manual-required-synced-only`).
+- Targeting supports both queue-backed and direct modes:
+  - Queue-backed: `--ui-row-id`, `--ui-listing-slug`, or `--ui-manual-required-synced-only`
+  - Direct: `--ui-product-url` or `--ui-printify-product-id` (optionally pair with `--ui-row-id`/`--ui-listing-slug` to inherit queue/checklist/setup-packet metadata and override only product ID).
+- Direct mode with no matched queue row defaults to safe publish prerequisites:
+  - `--ui-variant-visibility in_stock_only` (default)
+  - Sync details default to `product_title,description,mockups,colors_sizes_prices_skus,tags,shipping_profile`
+  - Optional overrides: `--ui-enable-personalization`, `--ui-variant-visibility`, `--ui-sync-details`, `--ui-title`.
 - Dry-run still performs no publish click; `--ui-screenshot-only` remains non-clicking selector/screenshot probing.
 - Artifacts are written to `out/printify_ui_automation/`:
   - run report JSON/CSV
