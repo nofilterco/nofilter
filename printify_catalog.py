@@ -103,7 +103,7 @@ def publish_product(shop_id: str, product_id: str, sync_details: dict[str, bool]
 
 
 def get_product(shop_id: str, product_id: str) -> dict[str, Any]:
-    data = _get(f"/shops/{shop_id}/products/{product_id}.json")
+    data = _get_safe(f"/shops/{shop_id}/products/{product_id}.json")
     return data if isinstance(data, dict) else {}
 
 
