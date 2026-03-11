@@ -78,6 +78,37 @@ def _selector_probe(page: Any, key: str, strategies: list[dict[str, Any]], *, re
     return {"key": key, "matched": False, "selected_strategy": None, "locator": None, "attempts": attempts}
 
 
+def _selector_probe_all(page: Any, key: str, strategies: list[dict[str, Any]]) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    matches: list[dict[str, Any]] = []
+    for strategy in strategies:
+        name = strategy.get("name", "unnamed")
+        factory = strategy.get("locator")
+        if not callable(factory):
+            attempts.append({"strategy": name, "matched": False, "error": "locator_factory_missing"})
+            continue
+        try:
+            loc = factory(page)
+            count = _safe_count(loc)
+            matched = count > 0
+            attempt: dict[str, Any] = {"strategy": name, "matched": matched, "count": count}
+            if matched:
+                attempts.append(attempt)
+                matches.append({"strategy": name, "locator": loc, "count": count})
+                continue
+            attempts.append(attempt)
+        except Exception as exc:
+            attempts.append({"strategy": name, "matched": False, "error": str(exc)})
+    return {
+        "key": key,
+        "matched": bool(matches),
+        "selected_strategy": matches[0]["strategy"] if matches else None,
+        "locator": matches[0]["locator"] if matches else None,
+        "attempts": attempts,
+        "matches": matches,
+    }
+
+
 def _personalization_toggle_probe(page: Any) -> dict[str, Any]:
     return _selector_probe(
         page,
@@ -91,62 +122,70 @@ def _personalization_toggle_probe(page: Any) -> dict[str, Any]:
     )
 
 
+def _variant_visibility_strategies() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "primary_full_sentence_label",
+            "locator": lambda p: p.get_by_label(
+                "Only show in stock variants and hide any out of stock variants", exact=False
+            ).first,
+        },
+        {
+            "name": "secondary_full_sentence_text",
+            "locator": lambda p: p.get_by_text(
+                "Only show in stock variants and hide any out of stock variants", exact=False
+            ).first,
+        },
+        {
+            "name": "role_radio_full_sentence",
+            "locator": lambda p: p.get_by_role(
+                "radio", name="Only show in stock variants and hide any out of stock variants", exact=False
+            ).first,
+        },
+        {"name": "primary_text_exact", "locator": lambda p: p.get_by_text("In stock only", exact=False).first},
+        {"name": "secondary_label", "locator": lambda p: p.get_by_label("In stock only", exact=False).first},
+        {
+            "name": "text_regex_long",
+            "locator": lambda p: p.locator("text=/only show in stock variants.*out of stock/i").first,
+        },
+        {"name": "text_regex", "locator": lambda p: p.locator("text=/in stock only/i").first},
+        {"name": "role_radio", "locator": lambda p: p.get_by_role("radio", name="In stock only", exact=False).first},
+    ]
+
+
 def _variant_visibility_probe(page: Any) -> dict[str, Any]:
-    return _selector_probe(
-        page,
-        "variant_visibility_in_stock_only",
-        [
-            {
-                "name": "primary_full_sentence_label",
-                "locator": lambda p: p.get_by_label(
-                    "Only show in stock variants and hide any out of stock variants", exact=False
-                ).first,
-            },
-            {
-                "name": "secondary_full_sentence_text",
-                "locator": lambda p: p.get_by_text(
-                    "Only show in stock variants and hide any out of stock variants", exact=False
-                ).first,
-            },
-            {
-                "name": "role_radio_full_sentence",
-                "locator": lambda p: p.get_by_role(
-                    "radio", name="Only show in stock variants and hide any out of stock variants", exact=False
-                ).first,
-            },
-            {"name": "primary_text_exact", "locator": lambda p: p.get_by_text("In stock only", exact=False).first},
-            {"name": "secondary_label", "locator": lambda p: p.get_by_label("In stock only", exact=False).first},
-            {
-                "name": "text_regex_long",
-                "locator": lambda p: p.locator("text=/only show in stock variants.*out of stock/i").first,
-            },
-            {"name": "text_regex", "locator": lambda p: p.locator("text=/in stock only/i").first},
-            {"name": "role_radio", "locator": lambda p: p.get_by_role("radio", name="In stock only", exact=False).first},
-        ],
-    )
+    return _selector_probe(page, "variant_visibility_in_stock_only", _variant_visibility_strategies())
+
+
+def _variant_visibility_probe_all(page: Any) -> dict[str, Any]:
+    return _selector_probe_all(page, "variant_visibility_in_stock_only", _variant_visibility_strategies())
+
+
+def _sync_detail_strategies(label: str) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "publish_panel_checkbox",
+            "locator": lambda p: p.locator(
+                "section:has-text('Select details for sync') input[type='checkbox']"
+            ).filter(has=p.get_by_text(label, exact=False)).first,
+        },
+        {"name": "primary_label_text", "locator": lambda p: p.locator(f'label:has-text("{label}")').first},
+        {"name": "secondary_get_by_label", "locator": lambda p: p.get_by_label(label, exact=False).first},
+        {
+            "name": "checkbox_near_text",
+            "locator": lambda p: p.locator(f":is(label,div,span):has-text('{label}') input[type='checkbox']").first,
+        },
+        {"name": "text_based", "locator": lambda p: p.get_by_text(label, exact=False).first},
+        {"name": "role_checkbox", "locator": lambda p: p.get_by_role("checkbox", name=label, exact=False).first},
+    ]
 
 
 def _sync_detail_probe(page: Any, label: str) -> dict[str, Any]:
-    return _selector_probe(
-        page,
-        f"sync_detail_{label}",
-        [
-            {
-                "name": "publish_panel_checkbox",
-                "locator": lambda p: p.locator(
-                    f"section:has-text('Select details for sync') input[type='checkbox']"
-                ).filter(has=p.get_by_text(label, exact=False)).first,
-            },
-            {"name": "primary_label_text", "locator": lambda p: p.locator(f'label:has-text("{label}")').first},
-            {"name": "secondary_get_by_label", "locator": lambda p: p.get_by_label(label, exact=False).first},
-            {
-                "name": "checkbox_near_text",
-                "locator": lambda p: p.locator(f":is(label,div,span):has-text('{label}') input[type='checkbox']").first,
-            },
-            {"name": "text_based", "locator": lambda p: p.get_by_text(label, exact=False).first},
-            {"name": "role_checkbox", "locator": lambda p: p.get_by_role("checkbox", name=label, exact=False).first},
-        ],
-    )
+    return _selector_probe(page, f"sync_detail_{label}", _sync_detail_strategies(label))
+
+
+def _sync_detail_probe_all(page: Any, label: str) -> dict[str, Any]:
+    return _selector_probe_all(page, f"sync_detail_{label}", _sync_detail_strategies(label))
 
 
 def _publish_area_probe(page: Any) -> dict[str, Any]:
@@ -209,6 +248,171 @@ def _state_snapshot(locator: Any) -> dict[str, Any]:
     except Exception:
         pass
     return state
+
+
+def _resolve_form_control(locator: Any, control_type: str) -> Any:
+    if locator is None:
+        return None
+    control_selector = "input[type='radio']" if control_type == "radio" else "input[type='checkbox']"
+    try:
+        tag = str(locator.evaluate("el => (el.tagName || '').toLowerCase()"))
+    except Exception:
+        tag = ""
+    if tag == "input":
+        try:
+            input_type = str(locator.get_attribute("type") or "").lower()
+            if input_type == control_type:
+                return locator
+        except Exception:
+            pass
+    for candidate in [
+        locator,
+        locator.locator(control_selector).first,
+        locator.locator(f"xpath=ancestor::label[1]//*[self::input[@type='{control_type}']]").first,
+        locator.locator(f"xpath=ancestor::*[contains(@class,'radio') or contains(@class,'checkbox')][1]//*[self::input[@type='{control_type}']]").first,
+        locator.locator(f"xpath=following::input[@type='{control_type}'][1]").first,
+        locator.locator(f"xpath=preceding::input[@type='{control_type}'][1]").first,
+    ]:
+        if _safe_count(candidate) > 0:
+            return candidate
+    return None
+
+
+def _interact_with_control(page: Any, locator: Any, *, control_type: str, timeout_ms: int) -> dict[str, Any]:
+    before_target = _state_snapshot(locator)
+    before_control = before_target
+    after_target = before_target
+    after_control = before_control
+    used_method = "none"
+    error = ""
+    confirmed = False
+
+    if locator is None:
+        return {
+            "before_state": before_target,
+            "after_state": after_target,
+            "control_before_state": before_control,
+            "control_after_state": after_control,
+            "used_method": used_method,
+            "error": "locator_missing",
+            "confirmed": False,
+        }
+
+    try:
+        locator.scroll_into_view_if_needed(timeout=timeout_ms)
+    except Exception:
+        pass
+    page.wait_for_timeout(120)
+
+    control = _resolve_form_control(locator, control_type)
+    if control is not None:
+        before_control = _state_snapshot(control)
+        try:
+            control.scroll_into_view_if_needed(timeout=timeout_ms)
+        except Exception:
+            pass
+        page.wait_for_timeout(120)
+
+    if control is not None:
+        try:
+            checked = bool(control.is_checked())
+        except Exception:
+            checked = None
+        if checked is not True:
+            try:
+                control.check(timeout=timeout_ms, force=False)
+                used_method = "input_check"
+            except Exception as exc:
+                error = f"check_failed:{exc}"
+
+    if used_method == "none":
+        for method in ["locator_click", "control_click"]:
+            try:
+                if method == "locator_click":
+                    locator.click(timeout=timeout_ms)
+                elif control is not None:
+                    control.click(timeout=timeout_ms)
+                else:
+                    continue
+                used_method = method
+                break
+            except Exception as exc:
+                error = f"{method}_failed:{exc}"
+
+    page.wait_for_timeout(220)
+    after_target = _state_snapshot(locator)
+    after_control = _state_snapshot(control) if control is not None else after_target
+    confirmed = bool(after_control.get("checked") or after_target.get("checked"))
+
+    return {
+        "before_state": before_target,
+        "after_state": after_target,
+        "control_before_state": before_control,
+        "control_after_state": after_control,
+        "used_method": used_method,
+        "error": error,
+        "confirmed": confirmed,
+    }
+
+
+def _ensure_publishing_settings_open(page: Any, *, timeout_ms: int) -> dict[str, Any]:
+    diagnostics: list[dict[str, Any]] = []
+    sync_probe = _selector_probe(
+        page,
+        "publishing_sync_anchor",
+        [
+            {"name": "select_sync_text", "locator": lambda p: p.get_by_text("Select details for sync", exact=False).first},
+            {"name": "sync_section", "locator": lambda p: p.locator("section:has-text('Select details for sync')").first},
+            {"name": "sync_checkbox", "locator": lambda p: p.locator("section input[type='checkbox']").first},
+        ],
+    )
+    diagnostics.append({"step": "pre_probe", **{k: sync_probe.get(k) for k in ("matched", "selected_strategy", "attempts")}})
+    if sync_probe.get("matched"):
+        return {"opened": True, "attempts": diagnostics, "already_open": True}
+
+    expand_probe = _selector_probe(
+        page,
+        "publishing_section_expand",
+        [
+            {"name": "heading_publish_settings", "locator": lambda p: p.get_by_role("heading", name="Publishing settings", exact=False).first},
+            {"name": "text_publish_settings", "locator": lambda p: p.get_by_text("Publishing settings", exact=False).first},
+            {"name": "publish_heading", "locator": lambda p: p.get_by_role("heading", name="Publish", exact=False).first},
+            {"name": "publish_text", "locator": lambda p: p.get_by_text("Publish", exact=False).first},
+        ],
+    )
+    anchor = expand_probe.get("locator")
+    step: dict[str, Any] = {
+        "step": "expand_probe",
+        "matched": expand_probe.get("matched"),
+        "selected_strategy": expand_probe.get("selected_strategy"),
+        "attempts": expand_probe.get("attempts", []),
+    }
+    if anchor is not None:
+        try:
+            anchor.scroll_into_view_if_needed(timeout=timeout_ms)
+        except Exception:
+            pass
+        page.wait_for_timeout(120)
+        try:
+            anchor.click(timeout=timeout_ms)
+            step["clicked"] = True
+        except Exception as exc:
+            step["clicked"] = False
+            step["click_error"] = str(exc)
+    diagnostics.append(step)
+    page.wait_for_timeout(250)
+
+    post_probe = _selector_probe(
+        page,
+        "publishing_sync_anchor_post",
+        [
+            {"name": "select_sync_text", "locator": lambda p: p.get_by_text("Select details for sync", exact=False).first},
+            {"name": "sync_section", "locator": lambda p: p.locator("section:has-text('Select details for sync')").first},
+            {"name": "sync_checkbox", "locator": lambda p: p.locator("section input[type='checkbox']").first},
+        ],
+    )
+    diagnostics.append({"step": "post_probe", **{k: post_probe.get(k) for k in ("matched", "selected_strategy", "attempts")}})
+    return {"opened": bool(post_probe.get("matched")), "attempts": diagnostics, "already_open": False}
 
 
 def _record_step(
@@ -862,54 +1066,74 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     screenshot_paths.append(str(shot_personalization))
 
                     variant_confirmed = t.variant_visibility_recommended != "in_stock_only"
+                    variant_attempts: list[dict[str, Any]] = []
                     if t.variant_visibility_recommended == "in_stock_only":
                         action_log.append({"ts": now_iso(), "step": "variant_visibility_recommended", "detail": "in_stock_only"})
+                        publishing_expand = _ensure_publishing_settings_open(page, timeout_ms=min(args.timeout_ms, 2500))
+                        selector_diagnostics["publishing_settings_variant_expand"] = publishing_expand
+                        action_log.append({"ts": now_iso(), "step": "publishing_settings_variant_expand", "detail": publishing_expand})
                         if not args.screenshot_only:
-                            in_stock_probe = _variant_visibility_probe(page)
+                            in_stock_probe = _variant_visibility_probe_all(page)
                             selector_diagnostics["variant_visibility_in_stock_only"] = {
                                 "matched": in_stock_probe["matched"],
                                 "selected_strategy": in_stock_probe["selected_strategy"],
                                 "attempts": in_stock_probe["attempts"],
                             }
                             action_log.append({"ts": now_iso(), "step": "variant_visibility_probe", "detail": selector_diagnostics["variant_visibility_in_stock_only"]})
-                            in_stock_option = in_stock_probe.get("locator")
-                            before_state = _state_snapshot(in_stock_option)
-                            after_state = before_state
-                            if in_stock_probe.get("matched") and in_stock_option is not None:
-                                in_stock_option.click(timeout=2000)
-                                page.wait_for_timeout(300)
-                                after_state = _state_snapshot(in_stock_option)
-                            variant_confirmed = bool(after_state.get("checked"))
+                            for match in in_stock_probe.get("matches", [])[:4]:
+                                interaction = _interact_with_control(
+                                    page,
+                                    match.get("locator"),
+                                    control_type="radio",
+                                    timeout_ms=min(args.timeout_ms, 2200),
+                                )
+                                attempt_detail = {
+                                    "strategy": match.get("strategy"),
+                                    "before_state": interaction["before_state"],
+                                    "after_state": interaction["after_state"],
+                                    "control_before_state": interaction["control_before_state"],
+                                    "control_after_state": interaction["control_after_state"],
+                                    "used_method": interaction["used_method"],
+                                    "error": interaction["error"],
+                                    "confirmed": interaction["confirmed"],
+                                }
+                                variant_attempts.append(attempt_detail)
+                                if interaction["confirmed"]:
+                                    variant_confirmed = True
+                                    break
+                                page.wait_for_timeout(180)
+                            if not in_stock_probe.get("matched"):
+                                variant_attempts.append({"strategy": "none", "error": "no_candidate_matched", "confirmed": False})
                             _record_step(
                                 action_log,
                                 step="variant_visibility_step",
                                 intended_action="set_variant_visibility_in_stock_only",
                                 selector_strategy=in_stock_probe.get("selected_strategy"),
-                                before_state=before_state,
-                                after_state=after_state,
+                                before_state=variant_attempts[0]["before_state"] if variant_attempts and "before_state" in variant_attempts[0] else {"visible": False, "enabled": False, "checked": None},
+                                after_state=variant_attempts[-1]["after_state"] if variant_attempts and "after_state" in variant_attempts[-1] else {"visible": False, "enabled": False, "checked": None},
                                 success=variant_confirmed,
                                 failure_reason="variant_visibility_not_selected" if not variant_confirmed else "",
                             )
-                            if not variant_confirmed:
-                                status = "failed"
-                                result = "variant_visibility_selection_failed"
+                            action_log.append({"ts": now_iso(), "step": "variant_visibility_attempts", "detail": variant_attempts})
 
                     shot_variant = shots_root / f"{run_id}_{t.listing_slug}_variant_visibility.png"
                     page.screenshot(path=str(shot_variant), full_page=True)
                     screenshot_paths.append(str(shot_variant))
 
                     sync_results: dict[str, bool] = {}
+                    sync_attempts: dict[str, list[dict[str, Any]]] = {}
+                    publishing_expand_sync = _ensure_publishing_settings_open(page, timeout_ms=min(args.timeout_ms, 2500))
+                    selector_diagnostics["publishing_settings_sync_expand"] = publishing_expand_sync
+                    action_log.append({"ts": now_iso(), "step": "publishing_settings_sync_expand", "detail": publishing_expand_sync})
                     for detail in t.sync_details_recommended:
                         label = SYNC_DETAIL_LABELS.get(detail, detail)
-                        detail_probe = _sync_detail_probe(page, label)
+                        detail_probe = _sync_detail_probe_all(page, label)
                         selector_key = f"sync_detail::{detail}"
                         selector_diagnostics[selector_key] = {
                             "matched": detail_probe["matched"],
                             "selected_strategy": detail_probe["selected_strategy"],
                             "attempts": detail_probe["attempts"],
                         }
-                        box = detail_probe.get("locator")
-                        found = bool(detail_probe.get("matched"))
                         action_log.append(
                             {
                                 "ts": now_iso(),
@@ -917,48 +1141,52 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                                 "detail": {
                                     "detail": detail,
                                     "label": label,
-                                    "found": found,
+                                    "found": bool(detail_probe.get("matched")),
                                     "selected_strategy": detail_probe["selected_strategy"],
                                     "attempts": detail_probe["attempts"],
                                 },
                             }
                         )
                         detail_success = False
-                        before_state = _state_snapshot(box)
-                        after_state = before_state
-                        if found and not args.screenshot_only:
-                            try:
-                                if not before_state.get("checked"):
-                                    box.click(timeout=2000)
-                                    page.wait_for_timeout(250)
-                                after_state = _state_snapshot(box)
-                                detail_success = bool(after_state.get("checked"))
-                            except Exception as exc:
-                                after_state = _state_snapshot(box)
-                                _record_step(
-                                    action_log,
-                                    step=f"sync_detail_step::{detail}",
-                                    intended_action=f"ensure_sync_detail_checked::{detail}",
-                                    selector_strategy=detail_probe.get("selected_strategy"),
-                                    before_state=before_state,
-                                    after_state=after_state,
-                                    success=False,
-                                    failure_reason=f"exception:{exc}",
+                        attempts_for_detail: list[dict[str, Any]] = []
+                        if not args.screenshot_only:
+                            for match in detail_probe.get("matches", [])[:4]:
+                                interaction = _interact_with_control(
+                                    page,
+                                    match.get("locator"),
+                                    control_type="checkbox",
+                                    timeout_ms=min(args.timeout_ms, 2200),
                                 )
-                                sync_results[detail] = False
-                                continue
+                                attempt_detail = {
+                                    "strategy": match.get("strategy"),
+                                    "before_state": interaction["before_state"],
+                                    "after_state": interaction["after_state"],
+                                    "control_before_state": interaction["control_before_state"],
+                                    "control_after_state": interaction["control_after_state"],
+                                    "used_method": interaction["used_method"],
+                                    "error": interaction["error"],
+                                    "confirmed": interaction["confirmed"],
+                                }
+                                attempts_for_detail.append(attempt_detail)
+                                if interaction["confirmed"]:
+                                    detail_success = True
+                                    break
+                                page.wait_for_timeout(120)
+                        if not detail_probe.get("matched"):
+                            attempts_for_detail.append({"strategy": "none", "error": "no_candidate_matched", "confirmed": False})
+                        sync_attempts[detail] = attempts_for_detail
                         _record_step(
                             action_log,
                             step=f"sync_detail_step::{detail}",
                             intended_action=f"ensure_sync_detail_checked::{detail}",
                             selector_strategy=detail_probe.get("selected_strategy"),
-                            before_state=before_state,
-                            after_state=after_state,
+                            before_state=attempts_for_detail[0]["before_state"] if attempts_for_detail and "before_state" in attempts_for_detail[0] else {"visible": False, "enabled": False, "checked": None},
+                            after_state=attempts_for_detail[-1]["after_state"] if attempts_for_detail and "after_state" in attempts_for_detail[-1] else {"visible": False, "enabled": False, "checked": None},
                             success=detail_success,
                             failure_reason="sync_checkbox_not_checked" if not detail_success else "",
                         )
+                        action_log.append({"ts": now_iso(), "step": f"sync_detail_attempts::{detail}", "detail": attempts_for_detail})
                         sync_results[detail] = detail_success
-
                     shot_sync = shots_root / f"{run_id}_{t.listing_slug}_sync_details.png"
                     page.screenshot(path=str(shot_sync), full_page=True)
                     screenshot_paths.append(str(shot_sync))
@@ -979,9 +1207,17 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                         failed_checks.append("variant_visibility_in_stock_only")
                     failed_checks.extend([f"sync::{key}" for key in missing_sync])
                     all_required_confirmed = not failed_checks
+                    selector_diagnostics["missing_confirmations"] = failed_checks
+                    selector_diagnostics["variant_visibility_attempts"] = variant_attempts
+                    selector_diagnostics["sync_detail_attempts"] = sync_attempts
+                    action_log.append({"ts": now_iso(), "step": "missing_confirmations", "detail": failed_checks})
 
                     if args.confirm_each and not args.headless:
                         _wait_for_enter(f"Review product {t.listing_slug} in browser; press Enter to continue...")
+
+                    publishing_expand_publish = _ensure_publishing_settings_open(page, timeout_ms=min(args.timeout_ms, 2500))
+                    selector_diagnostics["publishing_settings_publish_expand"] = publishing_expand_publish
+                    action_log.append({"ts": now_iso(), "step": "publishing_settings_publish_expand", "detail": publishing_expand_publish})
 
                     publish_btn_probe = _publish_button_probe(page)
                     selector_diagnostics["publish_button"] = {
@@ -1002,6 +1238,8 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     if not args.dry_run and not args.screenshot_only and all_required_confirmed:
                         if publish_btn is None:
                             raise RuntimeError("Publish/Republish button not found")
+                        publish_btn.scroll_into_view_if_needed(timeout=min(args.timeout_ms, 2500))
+                        page.wait_for_timeout(120)
                         publish_btn.click(timeout=args.timeout_ms)
                         page.wait_for_timeout(400)
                         publish_after = _state_snapshot(publish_btn)

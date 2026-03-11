@@ -86,3 +86,4 @@ This repo runs the **Crafted Occasion** Shopify + Printify catalog workflow for 
   - before/after screenshots
   - one-time `shopify_theme_personalize_button_checklist.md` reminder for the Printify Personalize Button app block in Shopify theme editor.
 - Safety controls: selector probes fail-fast, optional non-headless `--ui-confirm-each` pause before publish click.
+- Publishing settings robustness: the UI automation now explicitly re-opens/activates the Publishing settings section before variant visibility, sync detail checks, and publish-button probing, with per-attempt control diagnostics recorded in the report.
