@@ -96,8 +96,30 @@ def _variant_visibility_probe(page: Any) -> dict[str, Any]:
         page,
         "variant_visibility_in_stock_only",
         [
+            {
+                "name": "primary_full_sentence_label",
+                "locator": lambda p: p.get_by_label(
+                    "Only show in stock variants and hide any out of stock variants", exact=False
+                ).first,
+            },
+            {
+                "name": "secondary_full_sentence_text",
+                "locator": lambda p: p.get_by_text(
+                    "Only show in stock variants and hide any out of stock variants", exact=False
+                ).first,
+            },
+            {
+                "name": "role_radio_full_sentence",
+                "locator": lambda p: p.get_by_role(
+                    "radio", name="Only show in stock variants and hide any out of stock variants", exact=False
+                ).first,
+            },
             {"name": "primary_text_exact", "locator": lambda p: p.get_by_text("In stock only", exact=False).first},
             {"name": "secondary_label", "locator": lambda p: p.get_by_label("In stock only", exact=False).first},
+            {
+                "name": "text_regex_long",
+                "locator": lambda p: p.locator("text=/only show in stock variants.*out of stock/i").first,
+            },
             {"name": "text_regex", "locator": lambda p: p.locator("text=/in stock only/i").first},
             {"name": "role_radio", "locator": lambda p: p.get_by_role("radio", name="In stock only", exact=False).first},
         ],
@@ -109,8 +131,18 @@ def _sync_detail_probe(page: Any, label: str) -> dict[str, Any]:
         page,
         f"sync_detail_{label}",
         [
+            {
+                "name": "publish_panel_checkbox",
+                "locator": lambda p: p.locator(
+                    f"section:has-text('Select details for sync') input[type='checkbox']"
+                ).filter(has=p.get_by_text(label, exact=False)).first,
+            },
             {"name": "primary_label_text", "locator": lambda p: p.locator(f'label:has-text("{label}")').first},
             {"name": "secondary_get_by_label", "locator": lambda p: p.get_by_label(label, exact=False).first},
+            {
+                "name": "checkbox_near_text",
+                "locator": lambda p: p.locator(f":is(label,div,span):has-text('{label}') input[type='checkbox']").first,
+            },
             {"name": "text_based", "locator": lambda p: p.get_by_text(label, exact=False).first},
             {"name": "role_checkbox", "locator": lambda p: p.get_by_role("checkbox", name=label, exact=False).first},
         ],
@@ -136,12 +168,73 @@ def _publish_button_probe(page: Any) -> dict[str, Any]:
         page,
         "publish_button",
         [
+            {
+                "name": "publish_settings_footer_primary",
+                "locator": lambda p: p.locator("section:has-text('Publishing settings') button:has-text('Publish')").first,
+            },
+            {
+                "name": "publish_settings_footer_secondary",
+                "locator": lambda p: p.locator("section:has-text('Select details for sync') button:has-text('Publish')").first,
+            },
             {"name": "primary_republish", "locator": lambda p: p.get_by_role("button", name="Republish", exact=False).first},
             {"name": "secondary_publish", "locator": lambda p: p.get_by_role("button", name="Publish", exact=False).first},
             {"name": "text_button_regex", "locator": lambda p: p.locator("button:has-text('Republish')").first},
             {"name": "text_based_fallback", "locator": lambda p: p.locator("text=/Republish|Publish/i").first},
         ],
         required=True,
+    )
+
+
+def _state_snapshot(locator: Any) -> dict[str, Any]:
+    state: dict[str, Any] = {"visible": False, "enabled": False, "checked": None}
+    if locator is None:
+        return state
+    try:
+        state["visible"] = bool(locator.is_visible())
+    except Exception:
+        pass
+    try:
+        state["enabled"] = bool(locator.is_enabled())
+    except Exception:
+        pass
+    try:
+        state["checked"] = bool(locator.is_checked())
+        return state
+    except Exception:
+        pass
+    try:
+        aria = str(locator.get_attribute("aria-checked") or "").lower()
+        if aria in {"true", "false"}:
+            state["checked"] = aria == "true"
+    except Exception:
+        pass
+    return state
+
+
+def _record_step(
+    action_log: list[dict[str, Any]],
+    *,
+    step: str,
+    intended_action: str,
+    selector_strategy: str | None,
+    before_state: dict[str, Any],
+    after_state: dict[str, Any],
+    success: bool,
+    failure_reason: str = "",
+) -> None:
+    action_log.append(
+        {
+            "ts": now_iso(),
+            "step": step,
+            "detail": {
+                "intended_action": intended_action,
+                "selector_strategy": selector_strategy,
+                "before_state": before_state,
+                "after_state": after_state,
+                "success": success,
+                "failure_reason": failure_reason,
+            },
+        }
     )
 
 
@@ -711,17 +804,29 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                     personalization_toggle = personalization_toggle_probe.get("locator")
                     has_toggle = bool(personalization_toggle_probe.get("matched"))
 
+                    personalization_confirmed = True
                     if has_toggle and t.should_enable_personalization and not args.screenshot_only:
-                        try:
-                            aria = personalization_toggle.get_attribute("aria-checked")
-                            checked = str(aria).lower() == "true"
-                        except Exception:
-                            checked = False
-                        action_log.append({"ts": now_iso(), "step": "personalization_state", "detail": {"is_enabled": checked}})
-                        if not checked:
+                        before_state = _state_snapshot(personalization_toggle)
+                        if not before_state.get("checked"):
                             personalization_toggle.click(timeout=args.timeout_ms)
-                            action_log.append({"ts": now_iso(), "step": "personalization_enabled", "detail": "toggle_clicked"})
+                        after_state = _state_snapshot(personalization_toggle)
+                        personalization_confirmed = bool(after_state.get("checked"))
+                        _record_step(
+                            action_log,
+                            step="personalization_toggle_step",
+                            intended_action="enable_personalization",
+                            selector_strategy=personalization_toggle_probe.get("selected_strategy"),
+                            before_state=before_state,
+                            after_state=after_state,
+                            success=personalization_confirmed,
+                            failure_reason="toggle_not_enabled" if not personalization_confirmed else "",
+                        )
 
+                    shot_personalization = shots_root / f"{run_id}_{t.listing_slug}_personalization.png"
+                    page.screenshot(path=str(shot_personalization), full_page=True)
+                    screenshot_paths.append(str(shot_personalization))
+
+                    variant_confirmed = t.variant_visibility_recommended != "in_stock_only"
                     if t.variant_visibility_recommended == "in_stock_only":
                         action_log.append({"ts": now_iso(), "step": "variant_visibility_recommended", "detail": "in_stock_only"})
                         if not args.screenshot_only:
@@ -733,10 +838,32 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                             }
                             action_log.append({"ts": now_iso(), "step": "variant_visibility_probe", "detail": selector_diagnostics["variant_visibility_in_stock_only"]})
                             in_stock_option = in_stock_probe.get("locator")
+                            before_state = _state_snapshot(in_stock_option)
+                            after_state = before_state
                             if in_stock_probe.get("matched") and in_stock_option is not None:
                                 in_stock_option.click(timeout=2000)
-                                action_log.append({"ts": now_iso(), "step": "variant_visibility_set", "detail": "in_stock_only_clicked"})
+                                page.wait_for_timeout(300)
+                                after_state = _state_snapshot(in_stock_option)
+                            variant_confirmed = bool(after_state.get("checked"))
+                            _record_step(
+                                action_log,
+                                step="variant_visibility_step",
+                                intended_action="set_variant_visibility_in_stock_only",
+                                selector_strategy=in_stock_probe.get("selected_strategy"),
+                                before_state=before_state,
+                                after_state=after_state,
+                                success=variant_confirmed,
+                                failure_reason="variant_visibility_not_selected" if not variant_confirmed else "",
+                            )
+                            if not variant_confirmed:
+                                status = "failed"
+                                result = "variant_visibility_selection_failed"
 
+                    shot_variant = shots_root / f"{run_id}_{t.listing_slug}_variant_visibility.png"
+                    page.screenshot(path=str(shot_variant), full_page=True)
+                    screenshot_paths.append(str(shot_variant))
+
+                    sync_results: dict[str, bool] = {}
                     for detail in t.sync_details_recommended:
                         label = SYNC_DETAIL_LABELS.get(detail, detail)
                         detail_probe = _sync_detail_probe(page, label)
@@ -761,29 +888,110 @@ def run_ui_automation(args: argparse.Namespace) -> dict[str, Any]:
                                 },
                             }
                         )
+                        detail_success = False
+                        before_state = _state_snapshot(box)
+                        after_state = before_state
                         if found and not args.screenshot_only:
                             try:
-                                box.click(timeout=2000)
-                                action_log.append({"ts": now_iso(), "step": "sync_detail_checked", "detail": detail})
-                            except Exception:
-                                action_log.append({"ts": now_iso(), "step": "sync_detail_check_failed", "detail": detail})
+                                if not before_state.get("checked"):
+                                    box.click(timeout=2000)
+                                    page.wait_for_timeout(250)
+                                after_state = _state_snapshot(box)
+                                detail_success = bool(after_state.get("checked"))
+                            except Exception as exc:
+                                after_state = _state_snapshot(box)
+                                _record_step(
+                                    action_log,
+                                    step=f"sync_detail_step::{detail}",
+                                    intended_action=f"ensure_sync_detail_checked::{detail}",
+                                    selector_strategy=detail_probe.get("selected_strategy"),
+                                    before_state=before_state,
+                                    after_state=after_state,
+                                    success=False,
+                                    failure_reason=f"exception:{exc}",
+                                )
+                                sync_results[detail] = False
+                                continue
+                        _record_step(
+                            action_log,
+                            step=f"sync_detail_step::{detail}",
+                            intended_action=f"ensure_sync_detail_checked::{detail}",
+                            selector_strategy=detail_probe.get("selected_strategy"),
+                            before_state=before_state,
+                            after_state=after_state,
+                            success=detail_success,
+                            failure_reason="sync_checkbox_not_checked" if not detail_success else "",
+                        )
+                        sync_results[detail] = detail_success
+
+                    shot_sync = shots_root / f"{run_id}_{t.listing_slug}_sync_details.png"
+                    page.screenshot(path=str(shot_sync), full_page=True)
+                    screenshot_paths.append(str(shot_sync))
+
+                    required_sync = {
+                        "product_title",
+                        "description",
+                        "mockups",
+                        "colors_sizes_prices_skus",
+                        "tags",
+                        "shipping_profile",
+                    }
+                    missing_sync = sorted([k for k in required_sync if not sync_results.get(k)])
+                    all_required_confirmed = personalization_confirmed and variant_confirmed and not missing_sync
 
                     if args.confirm_each and not args.headless:
                         _wait_for_enter(f"Review product {t.listing_slug} in browser; press Enter to continue...")
 
-                    if not args.dry_run and not args.screenshot_only:
-                        publish_btn_probe = _publish_button_probe(page)
-                        selector_diagnostics["publish_button"] = {
-                            "matched": publish_btn_probe["matched"],
-                            "selected_strategy": publish_btn_probe["selected_strategy"],
-                            "attempts": publish_btn_probe["attempts"],
-                        }
-                        action_log.append({"ts": now_iso(), "step": "publish_button_probe", "detail": selector_diagnostics["publish_button"]})
-                        publish_btn = publish_btn_probe.get("locator")
+                    publish_btn_probe = _publish_button_probe(page)
+                    selector_diagnostics["publish_button"] = {
+                        "matched": publish_btn_probe["matched"],
+                        "selected_strategy": publish_btn_probe["selected_strategy"],
+                        "attempts": publish_btn_probe["attempts"],
+                    }
+                    action_log.append({"ts": now_iso(), "step": "publish_button_probe", "detail": selector_diagnostics["publish_button"]})
+                    publish_btn = publish_btn_probe.get("locator")
+                    publish_before = _state_snapshot(publish_btn)
+                    publish_after = publish_before
+
+                    shot_pre_publish = shots_root / f"{run_id}_{t.listing_slug}_pre_publish.png"
+                    page.screenshot(path=str(shot_pre_publish), full_page=True)
+                    screenshot_paths.append(str(shot_pre_publish))
+
+                    publish_clicked = False
+                    if not args.dry_run and not args.screenshot_only and all_required_confirmed:
                         if publish_btn is None:
                             raise RuntimeError("Publish/Republish button not found")
                         publish_btn.click(timeout=args.timeout_ms)
-                        action_log.append({"ts": now_iso(), "step": "publish_clicked", "detail": "publish_or_republish"})
+                        page.wait_for_timeout(400)
+                        publish_after = _state_snapshot(publish_btn)
+                        publish_clicked = True
+
+                    _record_step(
+                        action_log,
+                        step="publish_step",
+                        intended_action="click_publish_button",
+                        selector_strategy=publish_btn_probe.get("selected_strategy"),
+                        before_state=publish_before,
+                        after_state=publish_after,
+                        success=bool(publish_btn_probe.get("matched")) and (publish_clicked or args.dry_run),
+                        failure_reason=(
+                            f"required_settings_not_confirmed:{','.join(missing_sync)}"
+                            if (not all_required_confirmed and not args.dry_run)
+                            else "publish_button_not_found"
+                            if publish_btn is None
+                            else ""
+                        ),
+                    )
+
+                    if not args.dry_run and publish_clicked:
+                        shot_post_publish = shots_root / f"{run_id}_{t.listing_slug}_post_publish.png"
+                        page.screenshot(path=str(shot_post_publish), full_page=True)
+                        screenshot_paths.append(str(shot_post_publish))
+
+                    if not all_required_confirmed:
+                        status = "failed"
+                        result = f"required_settings_unconfirmed:{','.join(missing_sync) or 'personalization_or_variant'}"
+                        raise RuntimeError(result)
 
                     after = shots_root / f"{run_id}_{t.listing_slug}_after.png"
                     page.screenshot(path=str(after), full_page=True)
