@@ -1,0 +1,12 @@
+qa_policies:
+  - id: standard_launch_gate
+    min_publish_score: 75
+    weights:
+      design_quality: 0.2
+      title_quality: 0.1
+      niche_coherence: 0.15
+      personalization_clarity: 0.15
+      provider_readiness: 0.2
+      mockup_completeness: 0.1
+      shipping_fit: 0.05
+      seo_duplication_risk: 0.05

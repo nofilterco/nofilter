@@ -1,0 +1,10 @@
+launch_batches:
+  - batch_id: 2026q1_family_wedding_core
+    status: active
+    description: Core curated launch using stable product profiles and personalization levels 1-2.
+    include_collections: [family-milestones, family-reunion, bridal-party]
+    include_niches: [family_milestones, wedding_bridal_party, reunion_trip_groups]
+    allowed_product_families: [tee, hoodie, crewneck, mug]
+    excluded_product_families: [tote]
+    qa_policy_id: standard_launch_gate
+    launch_plan_source: launch_plan
